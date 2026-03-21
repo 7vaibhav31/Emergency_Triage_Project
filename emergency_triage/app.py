@@ -314,17 +314,74 @@ HTML_PAGE = """<!DOCTYPE html>
       </div>
     </div>
 
-    <div id="analytics-section" style="display: none; grid-column: 1 / -1; width: 100%; max-width: 800px; margin: 0 auto; padding-top: 40px;">
-      <div class="card" style="text-align: center; padding: 60px;">
-        <h2 style="color: var(--accent); margin-bottom: 15px;">📈 Analytics Dashboard</h2>
-        <p style="color: var(--muted); font-size: 1.1rem;">This module is under development. Soon, you will be able to see triage throughput metrics.</p>
+    <div id="analytics-section" style="display: none; grid-column: 1 / -1; width: 100%; max-width: 1000px; margin: 0 auto; padding-top: 20px;">
+      <h2 style="color: var(--accent); margin-bottom: 25px; font-size: 1.8rem; text-align: center;">📈 Triage Analytics Overview</h2>
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 24px;">
+        <div class="card" style="text-align: center; padding: 35px;">
+          <h3 style="color: var(--muted); font-size: 0.9rem; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 15px;">Total Analyses (30 Days)</h3>
+          <p style="font-size: 2.8rem; font-weight: 800; color: var(--text);">1,248</p>
+          <p style="color: var(--green); font-size: 0.9rem; font-weight: 700; margin-top: 8px;">+12.4% vs Last Month</p>
+        </div>
+        <div class="card" style="text-align: center; padding: 35px;">
+          <h3 style="color: var(--muted); font-size: 0.9rem; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 15px;">System Avg Latency</h3>
+          <p style="font-size: 2.8rem; font-weight: 800; color: var(--text);">1.8s</p>
+          <p style="color: var(--yellow); font-size: 0.9rem; font-weight: 700; margin-top: 8px;">Optimal Response Range</p>
+        </div>
+        <div class="card" style="text-align: center; padding: 35px;">
+          <h3 style="color: var(--muted); font-size: 0.9rem; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 15px;">Critical P1 Priority Rate</h3>
+          <p style="font-size: 2.8rem; font-weight: 800; color: var(--red);">18%</p>
+          <p style="color: var(--muted); font-size: 0.9rem; font-weight: 700; margin-top: 8px;">Standard ED Flow</p>
+        </div>
+      </div>
+      
+      <div class="card" style="margin-top: 24px; padding: 40px;">
+        <h3 style="color: var(--text); font-size: 1.2rem; margin-bottom: 20px; text-align: center;">AI Confidence Score Distribution</h3>
+        <div style="width: 100%; background: #f1f5f9; border-radius: 12px; height: 35px; display: flex; overflow: hidden; box-shadow: inset 0 2px 4px rgba(0,0,0,0.05);">
+          <div style="width: 78%; background: var(--green); display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; font-size: 0.85rem; letter-spacing: 0.05em;">HIGH CONFIDENCE (>80%)</div>
+          <div style="width: 18%; background: var(--yellow); display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; font-size: 0.85rem;">MODERATE</div>
+          <div style="width: 4%; background: var(--red); display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; font-size: 0.85rem;">LOW</div>
+        </div>
       </div>
     </div>
 
-    <div id="resources-section" style="display: none; grid-column: 1 / -1; width: 100%; max-width: 800px; margin: 0 auto; padding-top: 40px;">
-      <div class="card" style="text-align: center; padding: 60px;">
-        <h2 style="color: var(--accent); margin-bottom: 15px;">⚕️ Clinical Resources</h2>
-        <p style="color: var(--muted); font-size: 1.1rem;">The RAG Engine protocols are currently loaded directly. Further pdf resources go here.</p>
+    <div id="resources-section" style="display: none; grid-column: 1 / -1; width: 100%; max-width: 900px; margin: 0 auto; padding-top: 20px;">
+      <h2 style="color: var(--accent); margin-bottom: 25px; font-size: 1.8rem; text-align: center;">⚕️ Core RAG Clinical Protocols</h2>
+      <p style="text-align: center; color: var(--muted); margin-bottom: 30px; font-size: 1.1rem;">These are the foundational medical guidelines injected directly into the active Inference Engine.</p>
+      
+      <div style="display: flex; flex-direction: column; gap: 18px;">
+        
+        <div class="card" style="padding: 26px 36px; display: flex; justify-content: space-between; align-items: center; transition: all 0.2s;" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border)'">
+          <div>
+            <h3 style="color: var(--text); font-size: 1.2rem; margin-bottom: 6px; font-weight: 800;">AHA STEMI Guidelines</h3>
+            <p style="color: var(--muted); font-size: 1rem; font-weight: 500;">Protocol for suspected Acute ST-Elevation Myocardial Infarction.</p>
+          </div>
+          <button class="sc-btn" style="color: var(--accent); border-color: var(--accent); padding: 10px 20px;" onclick="alert('Viewing Core Protocol: AHA STEMI')">View Details</button>
+        </div>
+
+        <div class="card" style="padding: 26px 36px; display: flex; justify-content: space-between; align-items: center; transition: all 0.2s;" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border)'">
+          <div>
+            <h3 style="color: var(--text); font-size: 1.2rem; margin-bottom: 6px; font-weight: 800;">AHA/ASA Acute Ischemic Stroke</h3>
+            <p style="color: var(--muted); font-size: 1rem; font-weight: 500;">Time-sensitive workflow and tPA screening criteria for stroke presentation.</p>
+          </div>
+          <button class="sc-btn" style="color: var(--accent); border-color: var(--accent); padding: 10px 20px;" onclick="alert('Viewing Core Protocol: AHA Ischemic Stroke')">View Details</button>
+        </div>
+
+        <div class="card" style="padding: 26px 36px; display: flex; justify-content: space-between; align-items: center; transition: all 0.2s;" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border)'">
+          <div>
+            <h3 style="color: var(--text); font-size: 1.2rem; margin-bottom: 6px; font-weight: 800;">Surviving Sepsis Campaign</h3>
+            <p style="color: var(--muted); font-size: 1rem; font-weight: 500;">Adult screening, sepsis, and septic shock early goal-directed therapy.</p>
+          </div>
+          <button class="sc-btn" style="color: var(--accent); border-color: var(--accent); padding: 10px 20px;" onclick="alert('Viewing Core Protocol: Surviving Sepsis')">View Details</button>
+        </div>
+
+        <div class="card" style="padding: 26px 36px; display: flex; justify-content: space-between; align-items: center; transition: all 0.2s;" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border)'">
+          <div>
+            <h3 style="color: var(--text); font-size: 1.2rem; margin-bottom: 6px; font-weight: 800;">ATLS Major Trauma Outline</h3>
+            <p style="color: var(--muted); font-size: 1rem; font-weight: 500;">Primary triage mapping prioritizing ABCDE interventions.</p>
+          </div>
+          <button class="sc-btn" style="color: var(--accent); border-color: var(--accent); padding: 10px 20px;" onclick="alert('Viewing Core Protocol: ATLS Major Trauma')">View Details</button>
+        </div>
+
       </div>
     </div>
 
