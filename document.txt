@@ -1,0 +1,46 @@
+# AI-Powered Emergency Triage System - Project Explanation
+
+## Project Overview
+This project is an AI-powered clinical decision support system designed to assist medical professionals in emergency triage. Built with a Flask backend and a modern vanilla HTML/CSS/JS frontend, the application allows users to input patient symptoms (and history) and instantly receive a structured triage assessment consisting of priority level, probable diagnosis, recommended actions, confidence score, and clinical rationale.
+
+---
+
+## 🏗️ Architecture & Flow (Start to End)
+
+### 1. The Frontend (User Interface)
+- **What it is:** A single-page application styled elegantly with a custom design system (light pink/skin tone vibe) directly embedded within `app.py`.
+- **How it works:** The user enters the patient's presentation/symptoms into a text box, or clicks one of the predefined Quick Scenarios (e.g., STEMI, Stroke, Trauma). When the user clicks the "Run Triage Analysis" button, the frontend makes a POST request sending the JSON string of symptoms to the `/triage` endpoint on our Flask server.
+
+### 2. The Backend (Flask Application)
+- **What it is:** A Python Flask server `app.py` that listens for incoming requests. 
+- **How it works:** 
+  - The `@app.route("/")` endpoint simply serves the frontend HTML.
+  - The `@app.route("/triage")` endpoint receives the patient data and passes it to the `TriageService`.
+
+### 3. The Retrieval-Augmented Generation (RAG) Engine
+Once the `TriageService` receives the symptoms, the magic of RAG begins. Here is exactly how we use RAG to prevent AI hallucinations and ground responses in real medical protocols:
+
+- **The Problem:** Vanilla LLMs can hallucinate entirely incorrect medical advice or ignore standard protocol.
+- **The RAG Solution:** Before we ever ask the LLM for a diagnosis, we retrieve *real* medical protocols from our local knowledge base first.
+
+**Step-by-Step RAG Flow:**
+1. **The Medical Knowledge Base (`rag_data/knowledge_base.py`):** We have a hard-coded list of highly accurate medical protocols and guidelines broken into "chunks" (e.g., STEMI protocol, Stroke protocol, Asthma Exacerbation).
+2. **TF-IDF Vectorization (`rag_engine.py`):** When the application starts, it passes all those text chunks through `scikit-learn`'s `TfidfVectorizer` to convert them into mathematical vectors (sparse arrays).
+3. **Retrieval (Cosine Similarity):** When new patient symptoms arrive, those symptoms are also vectorized by the identical model. The engine then calculates the "Cosine Similarity" (the angle difference) between the symptom vector and all chunk vectors in the knowledge base.
+4. **Intelligent Context Pruning (ICP):** We sort the similarity scores from highest to lowest and grab only the Top 3 most relevant medical protocols (e.g., if a symptom mentions chest crushing pain, it pulls the STEMI protocol). We discard the rest to keep the context tight and relevant.
+5. **Context Injection:** The text from these top 3 protocols is cleanly formatted into a string.
+
+### 4. The Large Language Model (LLM) Inference 
+- We use the `OpenAI` client connected to **OpenRouter**, specifically using `arcee-ai/trinity-large-preview:free` (a Llama variant).
+- **The Prompt:** The `TriageService` takes the retrieved RAG protocols and the patient's symptoms, and wraps them in a massive system prompt instructing the AI to act as a strict decision-support embedded system. The prompt strongly rules the AI to only rely on the retrieved protocols and return *only* structured JSON.
+- **The API Call:** We send this payload to OpenRouter.
+
+### 5. Final Delivery
+- OpenRouter responds with a raw JSON string.
+- The Flask app parses the JSON, calculates the overall latency (e.g., 2000ms), and attaches metadata about which specific RAG protocols were used and their relevance scores.
+- The total payload is sent back to the frontend, which beautifully visualizes the diagnosis and protocol citations in the Triage Assessment panel.
+
+---
+
+## 🚀 Deployment Considerations (Vercel)
+Originally, the project relied on `sentence-transformers` and PyTorch for local Dense Vector Embeddings. However, Vercel Serverless deployments have strict size limits (~250MB for free tiers). PyTorch exceeds 900MB. To allow the project to be fully deployable for free on Vercel, the embedding engine was intelligently refactored to use standard Scikit-Learn TF-IDF vectorization, offering identical performance on standard keywords without the massive compute overhead, while properly routing the root configuration variables.
