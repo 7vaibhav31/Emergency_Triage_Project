@@ -100,7 +100,7 @@ HTML_PAGE = """<!DOCTYPE html>
   }
 
   body { background: var(--bg); color: var(--text); font-family: 'Inter', system-ui, -apple-system, sans-serif;
-         display: flex; min-height: 100vh; font-weight: 500; }
+         display: flex; min-height: 100vh; font-weight: 600; }
 
   /* ── Sidebar ── */
   aside { width: 250px; background: var(--surface); border-right: 1px solid var(--border);
@@ -227,10 +227,11 @@ HTML_PAGE = """<!DOCTYPE html>
   <nav>
     <a href="#" id="tab-dashboard" class="active" onclick="switchTab('dashboard')">🏥 Triage Dashboard</a>
     <a href="#" id="tab-upload" onclick="switchTab('upload')">📁 Patient Upload</a>
-    <a href="#" onclick="alert('Coming Soon!')">📋 Patient Records</a>
-    <a href="#" onclick="alert('Coming Soon!')">📈 Analytics</a>
-    <a href="#" onclick="alert('Coming Soon!')">⚕️ Resources</a>
-    <a href="#" onclick="alert('Coming Soon!')">⚙️ Settings</a>
+    <a href="#" id="tab-records" onclick="switchTab('records')">📋 Patient Records</a>
+    <a href="#" id="tab-analytics" onclick="switchTab('analytics')">📈 Analytics</a>
+    <a href="#" id="tab-resources" onclick="switchTab('resources')">⚕️ Resources</a>
+    <a href="#" id="tab-settings" onclick="switchTab('settings')">⚙️ Settings</a>
+    <a href="#" id="tab-developer" onclick="switchTab('developer')" style="margin-top: auto; border-top: 1px solid var(--border);">👨‍💻 About Developer</a>
   </nav>
 </aside>
 
@@ -250,7 +251,7 @@ HTML_PAGE = """<!DOCTYPE html>
     <div id="dashboard-section" style="display: contents;">
       <!-- LEFT: Input panel -->
       <div class="card">
-      <div class="card-title">// PATIENT INTAKE</div>
+        <div class="card-title">PATIENT INTAKE</div>
 
       <div class="field">
         <label>Quick Scenarios</label>
@@ -283,17 +284,17 @@ HTML_PAGE = """<!DOCTYPE html>
 
     <!-- RIGHT: Result panel -->
     <div class="card">
-      <div class="card-title">// TRIAGE ASSESSMENT</div>
+      <div class="card-title">TRIAGE ASSESSMENT</div>
       <div class="result-area" id="resultArea">
         <div class="empty-state">Select a scenario or enter patient details to begin triage...</div>
       </div>
-    </div>
+      </div>
     </div>
 
     <!-- UPLOAD SECTION -->
     <div id="upload-section" style="display: none; grid-column: 1 / -1; width: 100%; max-width: 800px; margin: 0 auto; padding-top: 40px;">
       <div class="card" style="text-align: center; padding: 60px; border: 2px dashed var(--accent); cursor: pointer;" onclick="document.getElementById('patientFile').click()">
-        <div class="card-title" style="font-size: 1.2rem; margin-bottom: 20px;">// UPLOAD PATIENT DOCUMENT</div>
+        <div class="card-title" style="font-size: 1.2rem; margin-bottom: 20px;">UPLOAD PATIENT DOCUMENT</div>
         <p style="color: var(--muted); margin-bottom: 30px; font-weight: 500; font-size: 1.05rem;">
           Upload a patient's medical history, chief complaints, or text-based prescription files (.txt format). <br/>
           The system will automatically parse the document and prepare the triage analysis.
@@ -302,6 +303,55 @@ HTML_PAGE = """<!DOCTYPE html>
         <button class="run-btn" style="width: auto; margin: 0 auto; padding: 15px 40px;" onclick="event.stopPropagation(); document.getElementById('patientFile').click()">
           📄 Select .TXT File
         </button>
+      </div>
+    </div>
+
+    <!-- NEW TABS SECTIONS -->
+    <div id="records-section" style="display: none; grid-column: 1 / -1; width: 100%; max-width: 800px; margin: 0 auto; padding-top: 40px;">
+      <div class="card" style="text-align: center; padding: 60px;">
+        <h2 style="color: var(--accent); margin-bottom: 15px;">📋 Patient Records</h2>
+        <p style="color: var(--muted); font-size: 1.1rem;">This module is currently offline. Connect to an EHR system to view historical records.</p>
+      </div>
+    </div>
+
+    <div id="analytics-section" style="display: none; grid-column: 1 / -1; width: 100%; max-width: 800px; margin: 0 auto; padding-top: 40px;">
+      <div class="card" style="text-align: center; padding: 60px;">
+        <h2 style="color: var(--accent); margin-bottom: 15px;">📈 Analytics Dashboard</h2>
+        <p style="color: var(--muted); font-size: 1.1rem;">This module is under development. Soon, you will be able to see triage throughput metrics.</p>
+      </div>
+    </div>
+
+    <div id="resources-section" style="display: none; grid-column: 1 / -1; width: 100%; max-width: 800px; margin: 0 auto; padding-top: 40px;">
+      <div class="card" style="text-align: center; padding: 60px;">
+        <h2 style="color: var(--accent); margin-bottom: 15px;">⚕️ Clinical Resources</h2>
+        <p style="color: var(--muted); font-size: 1.1rem;">The RAG Engine protocols are currently loaded directly. Further pdf resources go here.</p>
+      </div>
+    </div>
+
+    <div id="settings-section" style="display: none; grid-column: 1 / -1; width: 100%; max-width: 800px; margin: 0 auto; padding-top: 40px;">
+      <div class="card" style="text-align: center; padding: 60px;">
+        <h2 style="color: var(--accent); margin-bottom: 15px;">⚙️ Application Settings</h2>
+        <p style="color: var(--muted); font-size: 1.1rem;">No global settings defined right now. System pulls from local environment variables.</p>
+      </div>
+    </div>
+
+    <div id="developer-section" style="display: none; grid-column: 1 / -1; width: 100%; max-width: 600px; margin: 0 auto; padding-top: 40px;">
+      <div class="card" style="text-align: center; padding: 50px;">
+        <img src="https://ui-avatars.com/api/?name=Vaibhav+Sharma&background=ed64a6&color=fff&size=100&bold=true" style="border-radius: 50%; margin: 0 auto 20px auto; width: 100px; height: 100px;">
+        <h2 style="font-size: 2.2rem; color: var(--accent); margin-bottom: 10px;">Vaibhav Sharma</h2>
+        <p style="font-size: 1.15rem; color: var(--text); font-weight: 700; margin-bottom: 5px;">AI / ML Engineer</p>
+        <p style="font-size: 1rem; color: var(--muted); margin-bottom: 30px; line-height: 1.6; font-weight: 500;">
+          <strong>Education:</strong> Bachelor's Degree<br/>
+          Passionate about building intelligent AI-powered solutions like this robust clinical triage system.
+        </p>
+        <div style="display: flex; justify-content: center; gap: 30px;">
+          <a href="https://github.com/7vaibhav31" target="_blank" style="display: flex; align-items: center; gap: 8px; font-weight: 800; color: var(--text); text-decoration: none; padding: 10px 20px; border: 2px solid #e2e8f0; border-radius: 12px; transition: all 0.2s;">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg> GitHub
+          </a>
+          <a href="https://www.linkedin.com/in/vaibhav731/" target="_blank" style="display: flex; align-items: center; gap: 8px; font-weight: 800; color: #0a66c2; text-decoration: none; padding: 10px 20px; border: 2px solid #0a66c2; border-radius: 12px; transition: all 0.2s;">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M19 0h-14c-2.761 0-5 2.239-5 5v14c0 2.761 2.239 5 5 5h14c2.762 0 5-2.239 5-5v-14c0-2.761-2.238-5-5-5zm-11 19h-3v-11h3v11zm-1.5-12.268c-.966 0-1.75-.79-1.75-1.764s.784-1.764 1.75-1.764 1.75.79 1.75 1.764-.783 1.764-1.75 1.764zm13.5 12.268h-3v-5.604c0-3.368-4-3.113-4 0v5.604h-3v-11h3v1.765c1.396-2.586 7-2.777 7 2.476v6.759z"/></svg> LinkedIn
+          </a>
+        </div>
       </div>
     </div>
   </main>
@@ -320,14 +370,18 @@ function switchTab(tab) {
   document.querySelectorAll('nav a').forEach(a => a.classList.remove('active'));
   document.getElementById('tab-' + tab).classList.add('active');
 
-  // Toggle sections
-  if (tab === 'dashboard') {
-    document.getElementById('dashboard-section').style.display = 'contents';
-    document.getElementById('upload-section').style.display = 'none';
-  } else if (tab === 'upload') {
-    document.getElementById('dashboard-section').style.display = 'none';
-    document.getElementById('upload-section').style.display = 'block';
-  }
+  // Toggle all sections
+  const tabs = ['dashboard', 'upload', 'records', 'analytics', 'resources', 'settings', 'developer'];
+  tabs.forEach(t => {
+    let el = document.getElementById(t + '-section');
+    if(el) {
+      if(t === tab) {
+        el.style.display = (t === 'dashboard') ? 'contents' : 'block';
+      } else {
+        el.style.display = 'none';
+      }
+    }
+  });
 }
 
 function handleFileUpload(event) {
