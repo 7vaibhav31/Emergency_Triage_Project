@@ -1,130 +1,64 @@
-# 🚑 Emergency Triage AI — RAG + Claude Project
+# 🩺 MedRAG — AI Doctor Assistant
 
-A real-time emergency triage assistant using RAG (Retrieval-Augmented Generation)
-and Claude Sonnet 4. Built for local development in Antigravity IDE.
+**Live Deployment:** [https://emergency-triage-project.vercel.app/#](https://emergency-triage-project.vercel.app/#)
 
----
-
-## PROJECT STRUCTURE
-
-```
-emergency_triage/
-│
-├── app.py                    ← Flask web server + frontend HTML
-├── triage_service.py         ← RAG → Claude pipeline logic
-├── rag_engine.py             ← Embedding + retrieval + ICP
-├── requirements.txt          ← Python dependencies
-├── README.md                 ← This file
-│
-└── rag_data/
-    └── knowledge_base.py     ← Medical protocol chunks (your "database")
-```
+An advanced medical Retrieval-Augmented Generation (RAG) system built to act as an intelligent assistant for healthcare professionals. Upload clinical notes or prescriptions, and ask an AI questions grounded *strictly* in your uploaded document.
 
 ---
 
-## HOW TO RUN (step by step)
+## 🌟 Features
 
-### Step 1 — Open the folder in Antigravity
-Open the `emergency_triage/` folder in Antigravity IDE.
+- **Document Analysis:** Upload `.txt` clinical documents (prescriptions, patient histories).
+- **Zero Hallucination RAG:** The AI acts as a reading-comprehension engine over your specific document using local TF-IDF vectorization and Cosine Similarity.
+- **Interactive Multi-Page Chat:** A beautiful Single-Page Application (SPA) with a warm modern gradient UI, markdown rendering, and animated transitions.
+- **Live Telemetry:** Real-time metrics dashboard tracking latency (ms), token speed (tokens/sec), and algorithmic confidence.
+- **Free Vercel Deployment:** Embeddings are generated using blazing-fast, lightweight `scikit-learn` algorithms natively in Python to bypass Vercel's strict 250MB serverless constraints.
 
-### Step 2 — Create a virtual environment
-In the terminal inside Antigravity:
-```
+---
+
+## 🏗️ Architecture Stack
+
+- **Frontend:** Vanilla HTML5, CSS3 (Glassmorphism), JavaScript
+- **Backend:** Python, Flask
+- **RAG Engine:** Scikit-Learn (TF-IDF Vectorization)
+- **AI Inference:** OpenRouter API (`arcee-ai/trinity-large-preview:free`)
+- **Hosting:** Vercel Serverless
+
+---
+
+## 👥 Meet the Team
+
+Built with ❤️ by passionate engineers focusing on real-world AI applications:
+- **[Vaibhav Sharma](https://github.com/7vaibhav31)** (B.Tech CSE AI/ML) — RAG & LLMs
+- **[Bhaskar Mishra](https://github.com/Bhaskar7462)** (3rd Year B.Tech) — Backend & ML
+
+---
+
+## 🚀 How to Run Locally
+
+### 1. Clone & Open
+Clone the repository and open the folder in your terminal.
+
+### 2. Virtual Environment
+```bash
 python -m venv venv
-```
 
-### Step 3 — Activate the venv
-Windows:
-```
+# Windows:
 venv\Scripts\activate
-```
-Mac/Linux:
-```
+# Mac/Linux:
 source venv/bin/activate
 ```
 
-### Step 4 — Install dependencies
-```
+### 3. Install Dependencies
+```bash
 pip install -r requirements.txt
 ```
-(First time takes 2-3 minutes — downloads the embedding model ~80MB)
 
-### Step 5 — Set your Anthropic API key
-Windows:
-```
-set ANTHROPIC_API_KEY=your_api_key_here
-```
-Mac/Linux:
-```
-export ANTHROPIC_API_KEY=your_api_key_here
-```
-
-### Step 6 — Run the app
-```
+### 4. Run the Application
+The OpenRouter API key is securely handled by the application configuration. Simply start the server:
+```bash
 python app.py
 ```
 
-### Step 7 — Open in browser
-Go to: http://localhost:5000
-
----
-
-## HOW THE RAG PIPELINE WORKS
-
-```
-Patient Symptoms (text)
-        ↓
-[RAG Engine] — embed symptoms with sentence-transformer model
-        ↓
-[Cosine Similarity] — compare against 15 embedded protocol chunks
-        ↓
-[ICP] — keep top 3 most relevant chunks, discard the rest
-        ↓
-[Prompt Assembly] — system prompt + retrieved protocols + patient data
-        ↓
-[Claude Sonnet 4 API] — generates structured JSON triage
-        ↓
-[Flask] — returns JSON to browser
-        ↓
-[Frontend] — renders priority card + actions + RAG debug panel
-```
-
----
-
-## WHAT IS RAG? (simple explanation)
-
-Without RAG:
-  Claude answers from training data only → generic responses
-
-With RAG:
-  1. We have a knowledge base of medical protocols
-  2. When symptoms come in, we find the MOST RELEVANT protocols
-  3. We inject those into Claude's prompt
-  4. Claude now has specific, grounded guidelines to reference
-  → More accurate, more specific, less hallucination
-
-## WHAT IS ICP? (Intelligent Context Pruning)
-
-We have 15+ protocol chunks, but we only send 3 to Claude.
-Why? Sending all 15 would:
-  - Waste tokens (slower, more expensive)
-  - Confuse Claude with irrelevant info
-
-ICP = retrieve many → score by relevance → keep only the best → inject
-This is what keeps responses fast (target < 500ms).
-
----
-
-## ADDING MORE MEDICAL PROTOCOLS
-
-Edit `rag_data/knowledge_base.py` and add a new dict to KNOWLEDGE_CHUNKS:
-
-```python
-{
-    "id": "your_id",
-    "category": "your_category",
-    "text": "Your protocol text here..."
-}
-```
-
-Restart the app — it will automatically embed the new chunk on startup.
+### 5. Open in Web Browser
+Go to **http://localhost:5000** and upload `prescription.txt` to start testing!

@@ -1,0 +1,6 @@
+[Service] Using API key: sk-or-v1-1d25b1d0083...
+[App] Initializing Document QA Engine...
+[RAG] Dynamic engine initialized. Awaiting document.
+[App] Service Ready. Visit http://localhost:5000
+ * Serving Flask app 'app'
+ * Debug mode: on

@@ -1,55 +1,57 @@
-# AI-Powered Emergency Triage System - Project Explanation
+# MedRAG - AI-Powered Doctor Assistant
 
 ## Project Overview
-This project is an AI-powered clinical decision support system designed to assist medical professionals in emergency triage. Built with a Flask backend and a modern vanilla HTML/CSS/JS frontend, the application allows users to input patient symptoms (and history) and instantly receive a structured triage assessment consisting of priority level, probable diagnosis, recommended actions, confidence score, and clinical rationale.
+This project is an advanced Medical Retrieval-Augmented Generation (RAG) system designed to act as an intelligent assistant for doctors. Built with a Flask backend and a modern vanilla HTML/CSS/JS frontend, the application allows medical professionals to upload clinical documents (like patient histories or prescriptions) and query an AI to get instant, highly accurate answers grounded strictly in the provided document, preventing AI hallucinations.
 
 ---
 
 ## 🏗️ Architecture & Flow (Start to End)
 
 ### 1. The Frontend (User Interface)
-- **Visual Design & Typography:** Engineered with an elegant light pink/skin tone design system, the application leverages a premium, bold typography stack (`Inter` / system-ui with increased 600 weight) to ensure clinical readability and a highly professional aesthetic. The main header is proudly titled **Aegis: Advanced Medical Intelligence**. 
-- **Dynamic SPA Routing (Sidebar):** An interactive, Single-Page Application (SPA) sidebar provides instant, zero-reload navigation across the platform. It seamlessly switches between active modules (like the **Triage Dashboard** and **Patient Upload** interface) and elegantly handles placeholder modules (Patient Records, Analytics, Resources, Settings).
-- **Creator Profiles / About Developers:** The interface integrates dedicated profile cards highlighting the primary architects:
-  - **Vaibhav Sharma** (B.Tech Student - CSE AI/ML)
-  - **Bhaskar Mishra** (3rd-year B.Tech explorer turning code, data, and ideas into intelligent solutions)
-  This module features integrated vector social links to their respective GitHub and LinkedIn profiles.
-- **Data Entry & Flow:** Medical professionals can provide patient clinical data via three intuitive methods:
-  1. Manually typing into the Symptom/History text boxes.
-  2. Clicking predefined **Quick Scenarios** (e.g., STEMI, Stroke) for rapid testing.
-  3. **Patient Document Upload:** Dragging and dropping `.txt` medical notes directly into the UI. The browser seamlessly and securely parses the text on the client-side (`FileReader` API) and automatically triggers the triage analysis.
-- **Execution:** Once symptoms are populated (via typing or file upload), the frontend asynchronously triggers a POST request, sending the JSON payload to the `/triage` backend endpoint.
+- **Visual Design & Typography:** Engineered with a warm, premium gradient design system (pink, yellow, and sky blue hues), the application leverages modern glassmorphism and the `Inter` font family to ensure an inviting yet highly professional aesthetic.
+- **Dynamic Multi-Page SPA:** An interactive Single-Page Application (SPA) natively handles navigation across 4 distinct views with zero page reloads:
+  1. **Landing Hero:** A full-viewport introduction with animated visual elements and feature highlights.
+  2. **Document Upload:** A drag-and-drop interface for ingesting `.txt` medical notes and prescriptions.
+  3. **RAG Chat Interface:** The core Q&A dashboard containing the chat window, real-time performance metrics, and dynamic typing indicators.
+  4. **About Team:** A dedicated, full-screen profile page showcasing the primary architects.
+- **Creator Profiles:**
+  - **Vaibhav Sharma** (Final-year B.Tech CSE AI/ML Engineer passionate about RAG systems and LLMs)
+  - **Bhaskar Mishra** (3rd Year B.Tech Backend Developer and ML enthusiast)
+- **Data Entry & Flow:** Users start by uploading a clinical document. The file is sent via AJAX to the backend for indexing. Once successful, the UI transitions to the Chat Interface where the doctor can sequentially ask questions about the patient's data.
 
 ### 2. The Backend (Flask Application)
-- **What it is:** A Python Flask server `app.py` that listens for incoming requests. 
+- **What it is:** A Python Flask server (`app.py`) acting as the API layer.
 - **How it works:** 
-  - The `@app.route("/")` endpoint simply serves the frontend HTML.
-  - The `@app.route("/triage")` endpoint receives the patient data and passes it to the `TriageService`.
+  - The `@app.route("/")` endpoint serves the SPA application.
+  - The `@app.route("/api/upload")` endpoint receives the document text and triggers the RAG ingestion process.
+  - The `@app.route("/api/qa")` endpoint receives the user's chat queries, retrieves the answer, and calculates performance metrics.
 
 ### 3. The Retrieval-Augmented Generation (RAG) Engine
-Once the `TriageService` receives the symptoms, the magic of RAG begins. Here is exactly how we use RAG to prevent AI hallucinations and ground responses in real medical protocols:
+Once a document is uploaded, the magic of RAG ensures the AI only references the provided medical text:
 
-- **The Problem:** Vanilla LLMs can hallucinate entirely incorrect medical advice or ignore standard protocol.
-- **The RAG Solution:** Before we ever ask the LLM for a diagnosis, we retrieve *real* medical protocols from our local knowledge base first.
+- **The Problem:** General LLMs often hallucinate incorrect medical advice or invent patient data.
+- **The RAG Solution:** We force the LLM to act purely as a reading-comprehension engine over the specific document the doctor provided.
 
-**Step-by-Step RAG Flow:**
-1. **The Medical Knowledge Base (`rag_data/knowledge_base.py`):** We have a hard-coded list of highly accurate medical protocols and guidelines broken into "chunks" (e.g., STEMI protocol, Stroke protocol, Asthma Exacerbation).
-2. **TF-IDF Vectorization (`rag_engine.py`):** When the application starts, it passes all those text chunks through `scikit-learn`'s `TfidfVectorizer` to convert them into mathematical vectors (sparse arrays).
-3. **Retrieval (Cosine Similarity):** When new patient symptoms arrive, those symptoms are also vectorized by the identical model. The engine then calculates the "Cosine Similarity" (the angle difference) between the symptom vector and all chunk vectors in the knowledge base.
-4. **Intelligent Context Pruning (ICP):** We sort the similarity scores from highest to lowest and grab only the Top 3 most relevant medical protocols (e.g., if a symptom mentions chest crushing pain, it pulls the STEMI protocol). We discard the rest to keep the context tight and relevant.
-5. **Context Injection:** The text from these top 3 protocols is cleanly formatted into a string.
+**Step-by-Step RAG Flow (`rag_engine.py`):**
+1. **Dynamic Ingestion:** The uploaded document is split into smaller, logical text "chunks" to prevent overwhelming the AI's context window.
+2. **TF-IDF Vectorization:** The system passes these chunks through `scikit-learn`'s `TfidfVectorizer` to convert them into mathematical vectors (sparse arrays), storing them in memory for the session.
+3. **Retrieval (Cosine Similarity):** When the doctor asks a question, that question is vectorized. The engine calculates the Cosine Similarity between the question vector and all document chunk vectors.
+4. **Intelligent Context Pruning:** We retrieve only the Top 3 most relevant chunks to the question, ensuring maximum accuracy and minimizing API latency.
 
-### 4. The Large Language Model (LLM) Inference 
-- We use the `OpenAI` client connected to **OpenRouter**, specifically using `arcee-ai/trinity-large-preview:free` (a Llama variant).
-- **The Prompt:** The `TriageService` takes the retrieved RAG protocols and the patient's symptoms, and wraps them in a massive system prompt instructing the AI to act as a strict decision-support embedded system. The prompt strongly rules the AI to only rely on the retrieved protocols and return *only* structured JSON.
-- **The API Call:** We send this payload to OpenRouter.
+### 4. The Large Language Model (LLM) Inference (`triage_service.py`)
+- We use the `OpenAI` client connected to **OpenRouter**, utilizing a completely free, fast model (`arcee-ai/trinity-large-preview:free`).
+- **The Prompt:** The `DocumentQAService` takes the retrieved RAG chunks and the doctor's question, wrapping them in a strict system prompt. The prompt commands the AI to answer *only* based on the provided excerpts and clearly state if the information is missing.
+- **The API Call:** This highly constrained payload is sent securely to OpenRouter.
 
-### 5. Final Delivery
-- OpenRouter responds with a raw JSON string.
-- The Flask app parses the JSON, calculates the overall latency (e.g., 2000ms), and attaches metadata about which specific RAG protocols were used and their relevance scores.
-- The total payload is sent back to the frontend, which beautifully visualizes the diagnosis and protocol citations in the Triage Assessment panel.
+### 5. Final Delivery & Metrics
+- The LLM streams back the answer.
+- The Flask app calculates critical real-time performance metrics:
+  - **Latency (ms):** Total round-trip time of the API call.
+  - **Token Speed:** Words generated per second.
+  - **Algorithmic Confidence:** The average relevance score of the retrieved chunks.
+- The response and metrics are sent back to the frontend, displaying the answer in the chat bubble while rendering the speed/confidence stats dynamically in the side panel.
 
 ---
 
 ## 🚀 Deployment Considerations (Vercel)
-Originally, the project relied on `sentence-transformers` and PyTorch for local Dense Vector Embeddings. However, Vercel Serverless deployments have strict size limits (~250MB for free tiers). PyTorch exceeds 900MB. To allow the project to be fully deployable for free on Vercel, the embedding engine was intelligently refactored to use standard Scikit-Learn TF-IDF vectorization, offering identical performance on standard keywords without the massive compute overhead, while properly routing the root configuration variables.
+To allow the project to be fully deployable for free on Vercel Serverless Functions, we bypassed heavy embedding models (like PyTorch/SentenceTransformers, which exceed Vercel's 250MB limit). By utilizing Scikit-Learn's TF-IDF vectorization, the RAG engine achieves blazing-fast, lightweight similarity matching natively in Python, keeping the build size extraordinarily small while maintaining high retrieval accuracy for text-based clinical notes.

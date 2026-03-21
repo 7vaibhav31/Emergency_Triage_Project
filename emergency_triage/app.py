@@ -1,622 +1,687 @@
-# ============================================================
-# app.py
-#
-# WHAT IS THIS FILE?
-# The Flask web server. It has two jobs:
-#
-#   1. Serve the frontend HTML page (GET /)
-#   2. Handle triage API requests     (POST /triage)
-#
-# HOW IT WORKS:
-#   Browser → POST /triage with JSON body
-#           → TriageService.run_triage()
-#           → Returns JSON response
-#           → Browser renders triage card
-#
-# TO RUN:
-#   python app.py
-#   Then open http://localhost:5000 in your browser
-# ============================================================
-
 import os
 from flask import Flask, request, jsonify, render_template_string
-from triage_service import TriageService
+from triage_service import DocumentQAService
 
 app = Flask(__name__)
 
-# Initialize triage service ONCE at startup
-# (RAG model loads here — takes ~10 sec first time)
-print("[App] Initializing Triage Service...")
-service = TriageService()
-print("[App] Ready. Visit http://localhost:5000")
+print("[App] Initializing Document QA Engine...")
+qa_service = DocumentQAService()
+print("[App] Service Ready. Visit http://localhost:5000")
 
-
-# ── ROUTE 1: Serve the frontend ────────────────────────────────
 @app.route("/")
 def index():
-    """Serves the main HTML page."""
     return render_template_string(HTML_PAGE)
 
-
-# ── ROUTE 2: Triage API endpoint ───────────────────────────────
-@app.route("/triage", methods=["POST"])
-def triage():
-    """
-    Accepts patient data, runs the full RAG + Claude pipeline,
-    returns a structured triage assessment as JSON.
-
-    Expected request body:
-        { "symptoms": "...", "history": "..." }
-
-    Returns:
-        { "priority": ..., "diagnosis": ..., "actions": [...],
-          "confidence": ..., "rationale": ..., "latency_ms": ...,
-          "retrieved_protocols": [...] }
-    """
+@app.route("/api/upload", methods=["POST"])
+def upload_doc():
     data = request.get_json()
-
-    # Validate input
-    symptoms = data.get("symptoms", "").strip()
-    if not symptoms:
-        return jsonify({"error": "Symptoms field is required."}), 400
-
-    history = data.get("history", "")
-
+    text = data.get("text", "").strip()
+    if not text:
+        return jsonify({"error": "No document text provided."}), 400
     try:
-        result = service.run_triage(symptoms=symptoms, history=history)
+        chunks = qa_service.ingest_document(text)
+        return jsonify({"message": f"Successfully indexed into {chunks} context fragments.", "chunks": chunks})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/api/qa", methods=["POST"])
+def qa_document():
+    data = request.get_json()
+    query = data.get("query", "").strip()
+    if not query:
+        return jsonify({"error": "Query required."}), 400
+    try:
+        if not qa_service.rag.chunks:
+            return jsonify({"error": "Please upload a prescription or document first."}), 400
+        result = qa_service.answer_medical_question(query)
         return jsonify(result)
     except Exception as e:
-        # Return error details so you can debug from the browser
         return jsonify({"error": str(e)}), 500
 
 
-# ============================================================
-# FRONTEND HTML
-# All the UI lives here as a Python string so the project
-# stays in a single folder with no separate HTML files.
-# ============================================================
 HTML_PAGE = """<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>VB PROJECT</title>
+<title>MedRAG — AI Doctor Assistant</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-  /* ── Design tokens (Light Pink/Skin Theme) ── */
   :root {
-    --bg: #fff5f8;       /* Very light pink background */
-    --surface: #ffffff;  /* Pure white cards/sidebar */
-    --border: #fdd8e5;   /* Soft pink border */
-    --text: #2d3748;     /* Dark text for readability */
-    --muted: #718096;    /* Gray text */
-    --red: #e53e3e;      /* Red for critical priorities */
-    --yellow: #d69e2e;
-    --green: #38a169;
-    --accent: #ed64a6;   /* Vibrant pink accent */
-    --accent-hover: #d53f8c;
-    --mono: 'Courier New', monospace;
+    --pink:         #ff6b9d;
+    --pink-light:   #ffb3d1;
+    --pink-soft:    #fff0f6;
+    --yellow:       #ffcc44;
+    --yellow-light: #fff5cc;
+    --yellow-warm:  #ffe58a;
+    --sky:          #87ceeb;
+    --sky-light:    #d6f0ff;
+    --sky-mid:      #5ba3c9;
+    --warm-bg:      #fffaf3;
+    --text-dark:    #2d1b4e;
+    --text-mid:     #6b4f7c;
+    --text-light:   #a08fb0;
+    --border:       #f0e0f5;
+    --shadow:       0 8px 32px rgba(255,107,157,0.10);
+    --shadow-lg:    0 20px 60px rgba(255,107,157,0.15);
   }
 
-  body { background: var(--bg); color: var(--text); font-family: 'Inter', system-ui, -apple-system, sans-serif;
-         display: flex; min-height: 100vh; font-weight: 600; }
+  body { font-family: 'Inter', sans-serif; background: var(--warm-bg); color: var(--text-dark); overflow-x: hidden; }
 
-  /* ── Sidebar ── */
-  aside { width: 250px; background: var(--surface); border-right: 1px solid var(--border);
-          display: flex; flex-direction: column; }
-  .logo-area { padding: 24px; border-bottom: 1px solid var(--border); }
-  .logo { font-weight: 800; font-size: 1.4rem; color: var(--accent); letter-spacing: -0.5px; }
-  
-  nav { flex: 1; padding: 20px 0; display: flex; flex-direction: column; gap: 4px; }
-  nav a { padding: 12px 24px; color: var(--text); text-decoration: none; font-weight: 600;
-          font-size: 0.95rem; border-left: 3px solid transparent; transition: all 0.2s; }
-  nav a:hover, nav a.active { background: #fff0f5; color: var(--accent); border-left-color: var(--accent); }
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: var(--pink-soft); }
+  ::-webkit-scrollbar-thumb { background: var(--pink-light); border-radius: 10px; }
 
-  /* ── Main Layout ── */
-  .layout-wrapper { flex: 1; display: flex; flex-direction: column; }
-  
-  header { background: var(--surface); border-bottom: 1px solid var(--border);
-           padding: 16px 36px; display: flex; align-items: center; justify-content: space-between; }
-  .header-title { font-weight: 600; font-size: 1.1rem; color: var(--muted); }
-  
-  .badge { font-family: var(--mono); font-size: 0.70rem; padding: 4px 10px;
-           border: 1px solid var(--border); border-radius: 20px; color: var(--muted); background: var(--bg); font-weight: 700;}
-  .badge.live { border-color: var(--green); color: var(--green); background: rgba(56,161,105,0.05); }
+  /* PAGE SYSTEM */
+  .page { display: none; min-height: 100vh; }
+  .page.active { display: flex; animation: pageIn 0.55s cubic-bezier(0.16,1,0.3,1) forwards; }
+  @keyframes pageIn { from { opacity:0; transform:translateY(28px); } to { opacity:1; transform:translateY(0); } }
 
-  main { flex: 1; display: grid; grid-template-columns: 1fr 1fr;
-         gap: 24px; padding: 36px; width: 100%; max-width: 1400px; margin: 0 auto; }
-
-  /* ── Cards ── */
-  .card { background: var(--surface); border: 1px solid var(--border);
-          border-radius: 12px; padding: 26px; display: flex;
-          flex-direction: column; gap: 18px; box-shadow: 0 4px 20px rgba(237,100,166,0.05); }
-  .card-title { font-family: var(--mono); font-size: 0.8rem; color: var(--accent);
-                letter-spacing: 0.12em; text-transform: uppercase; font-weight: 700; }
-
-  /* ── Form elements ── */
-  label { font-family: var(--mono); font-size: 0.8rem; color: var(--muted);
-          text-transform: uppercase; letter-spacing: 0.1em; font-weight: 700; }
-  textarea {
-    background: #fafafa; border: 1px solid #e2e8f0; border-radius: 8px;
-    color: var(--text); font-family: var(--mono); font-size: 0.9rem;
-    line-height: 1.75; padding: 14px; resize: vertical; outline: none;
-    transition: all 0.2s; width: 100%; box-shadow: inset 0 2px 4px rgba(0,0,0,0.02);
+  /* BUTTONS */
+  .btn-primary {
+    background: linear-gradient(135deg, var(--pink) 0%, #ff9a44 100%);
+    color: white; border: none; padding: 16px 44px; border-radius: 50px;
+    font-size: 1.05rem; font-weight: 700; cursor: pointer;
+    box-shadow: 0 6px 24px rgba(255,107,157,0.40); transition: all 0.3s ease; letter-spacing:0.5px;
   }
-  textarea:focus { border-color: var(--accent); background: #ffffff; box-shadow: 0 0 0 3px rgba(237,100,166,0.15); }
+  .btn-primary:hover { transform: translateY(-3px); box-shadow: 0 12px 36px rgba(255,107,157,0.50); }
 
-  /* ── Scenario buttons ── */
-  .scenarios { display: flex; flex-wrap: wrap; gap: 8px; }
-  .sc-btn { font-family: var(--mono); font-size: 0.8rem; padding: 8px 16px; font-weight: 600;
-            border: 1px solid var(--border); border-radius: 20px;
-            background: var(--surface); color: var(--text); cursor: pointer;
-            transition: all 0.2s; box-shadow: 0 2px 5px rgba(0,0,0,0.02); }
-  .sc-btn:hover { border-color: var(--accent); color: var(--accent); background: #fff0f5; transform: translateY(-1px); }
+  /* SPINNER */
+  .spinner { width:20px; height:20px; border:3px solid rgba(255,255,255,0.3); border-top:3px solid white; border-radius:50%; animation:spin 0.8s linear infinite; display:inline-block; }
+  @keyframes spin { to { transform:rotate(360deg); } }
 
-  /* ── Run button ── */
-  .run-btn { background: var(--accent); color: white; border: none;
-             border-radius: 8px; padding: 15px 28px; font-weight: 700;
-             font-size: 1.05rem; cursor: pointer; transition: all 0.2s;
-             display: flex; align-items: center; gap: 8px; justify-content: center; width: 100%;
-             box-shadow: 0 4px 15px rgba(237,100,166,0.3); }
-  .run-btn:hover   { background: var(--accent-hover); transform: translateY(-1px); box-shadow: 0 6px 20px rgba(237,100,166,0.4); }
-  .run-btn:disabled { opacity: 0.6; cursor: not-allowed; transform: none; box-shadow: none; }
+  /* BLOBS */
+  .blob-wrap { position:absolute; inset:0; overflow:hidden; pointer-events:none; z-index:0; }
+  .blob { position:absolute; border-radius:50%; filter:blur(80px); opacity:0.22; animation:blobFloat 8s ease-in-out infinite alternate; }
+  .blob-1 { width:500px; height:500px; background:var(--pink);   top:-100px; left:-100px; animation-delay:0s; }
+  .blob-2 { width:400px; height:400px; background:var(--yellow); top:30%; right:-80px;  animation-delay:-3s; }
+  .blob-3 { width:350px; height:350px; background:var(--sky);    bottom:-80px; left:40%; animation-delay:-5s; }
+  @keyframes blobFloat { from { transform:translate(0,0) scale(1); } to { transform:translate(30px,-40px) scale(1.08); } }
 
-  /* ── Result panel ── */
-  .result-area { min-height: 350px; display: flex; flex-direction: column; gap: 16px; }
-  .empty-state { display: flex; flex: 1; align-items: center; justify-content: center;
-                 color: var(--muted); font-size: 0.95rem; font-style: italic; }
+  /* PULSE RINGS */
+  .pulse-ring { position:absolute; width:300px; height:300px; border-radius:50%; border:2px solid rgba(255,107,157,0.15); top:50%; left:50%; transform:translate(-50%,-50%); animation:ringPulse 3s ease-out infinite; }
+  .pulse-ring:nth-child(2) { animation-delay:1s; }
+  .pulse-ring:nth-child(3) { animation-delay:2s; }
+  @keyframes ringPulse { 0% { transform:translate(-50%,-50%) scale(1); opacity:0.4; } 100% { transform:translate(-50%,-50%) scale(2.5); opacity:0; } }
 
-  /* ── Priority badge ── */
-  .priority { display: inline-flex; align-items: center; gap: 6px;
-              font-family: var(--mono); font-size: 0.75rem; font-weight: 800;
-              padding: 6px 14px; border-radius: 6px; letter-spacing: 0.1em; }
-  .priority.critical { background: rgba(229,62,62,0.1); color: var(--red); border: 1px solid rgba(229,62,62,0.2); }
-  .priority.moderate { background: rgba(214,158,46,0.1); color: var(--yellow); border: 1px solid rgba(214,158,46,0.2); }
-  .priority.low      { background: rgba(56,161,105,0.1); color: var(--green); border: 1px solid rgba(56,161,105,0.2); }
+  /* BADGE */
+  .badge { display:inline-flex; align-items:center; gap:8px; background:linear-gradient(135deg,#ffe4f0,#fff5cc); border:1.5px solid var(--pink-light); color:var(--pink); padding:8px 20px; border-radius:50px; font-size:0.82rem; font-weight:700; letter-spacing:1px; text-transform:uppercase; margin-bottom:32px; }
+  .badge-dot { width:8px; height:8px; background:var(--pink); border-radius:50%; animation:pulseDot 1.5s ease-in-out infinite; }
+  @keyframes pulseDot { 0%,100% { transform:scale(1); opacity:1; } 50% { transform:scale(1.5); opacity:0.6; } }
 
-  /* ── Field groups ── */
-  .field { display: flex; flex-direction: column; gap: 6px; }
-  .field-label { font-family: var(--mono); font-size: 0.75rem; color: var(--muted);
-                 text-transform: uppercase; letter-spacing: 0.12em; font-weight: 700; }
-  .field-value { font-size: 1rem; line-height: 1.6; color: var(--text); font-weight: 500; }
+  /* ======================== PAGE 1 — LANDING ======================== */
+  #page-landing {
+    flex-direction:column; align-items:center; justify-content:center;
+    position:relative; background:linear-gradient(135deg,#fff5fa 0%,#fffef0 50%,#f0f9ff 100%);
+    min-height:100vh; padding:40px 20px; text-align:center;
+  }
+  .landing-content { position:relative; z-index:1; max-width:800px; }
+  .hero-title {
+    font-size:clamp(2.8rem,6vw,5rem); font-weight:900; line-height:1.1; margin-bottom:24px;
+    background:linear-gradient(135deg,var(--pink) 0%,#ff9a44 40%,var(--sky-mid) 100%);
+    -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text;
+  }
+  .hero-desc { font-size:1.15rem; color:var(--text-mid); line-height:1.8; margin-bottom:48px; max-width:620px; margin-left:auto; margin-right:auto; }
+  .hero-features { display:flex; gap:16px; justify-content:center; margin-bottom:56px; flex-wrap:wrap; }
+  .feature-pill { display:flex; align-items:center; gap:8px; background:white; border:1.5px solid var(--border); padding:10px 20px; border-radius:50px; font-size:0.88rem; font-weight:600; color:var(--text-dark); box-shadow:0 4px 16px rgba(255,107,157,0.08); }
+  .scroll-hint { margin-top:40px; color:var(--text-light); font-size:0.85rem; font-weight:500; animation:bounce 2s infinite; display:flex; flex-direction:column; align-items:center; gap:6px; }
+  @keyframes bounce { 0%,100% { transform:translateY(0); } 50% { transform:translateY(8px); } }
 
-  /* ── Action list ── */
-  .action-list { list-style: none; display: flex; flex-direction: column; gap: 8px; padding-left: 4px; }
-  .action-list li { display: flex; gap: 12px; font-family: var(--mono);
-                    font-size: 0.95rem; line-height: 1.6; color: var(--text); align-items: flex-start; }
-  .action-list li::before { content: '✓'; color: var(--accent); font-weight: 900; }
+  /* ======================== PAGE 2 — UPLOAD ======================== */
+  #page-upload {
+    flex-direction:column; align-items:center; justify-content:center;
+    background:linear-gradient(135deg,#fff9f0 0%,#fff5fa 50%,#f5f5ff 100%);
+    min-height:100vh; padding:60px 20px; position:relative;
+  }
+  .upload-card { position:relative; z-index:1; background:white; border-radius:32px; padding:52px 56px; width:100%; max-width:620px; box-shadow:var(--shadow-lg); border:1.5px solid var(--border); text-align:center; }
+  .upload-icon-wrap { width:96px; height:96px; background:linear-gradient(135deg,var(--pink-soft),var(--yellow-light)); border-radius:50%; display:flex; align-items:center; justify-content:center; margin:0 auto 24px; font-size:2.4rem; border:2px solid var(--pink-light); }
+  .upload-card h1 { font-size:1.9rem; font-weight:800; color:var(--text-dark); margin-bottom:10px; }
+  .upload-card p  { color:var(--text-mid); margin-bottom:32px; font-size:0.96rem; line-height:1.7; }
+  .drop-zone { border:2.5px dashed var(--pink-light); border-radius:20px; padding:44px 20px; cursor:pointer; transition:all 0.3s ease; background:linear-gradient(135deg,#fff9fc,#fffef5); margin-bottom:20px; }
+  .drop-zone:hover { border-color:var(--pink); background:var(--pink-soft); transform:scale(1.01); }
+  .drop-zone .dz-icon { font-size:2.8rem; margin-bottom:10px; }
+  .drop-zone h3 { font-size:1.05rem; font-weight:700; color:var(--text-dark); margin-bottom:6px; }
+  .drop-zone small { color:var(--text-light); font-size:0.83rem; }
+  #uploadStatus { display:none; margin-top:18px; padding:14px 20px; border-radius:14px; font-weight:600; font-size:0.93rem; }
+  #uploadStatus.success { background:linear-gradient(135deg,#f0fff8,#e8f5ff); border:1.5px solid #a8e6cf; color:#1a7a4a; }
+  #uploadStatus.error   { background:#fff5f5; border:1.5px solid #ffb3b3; color:#cc3333; }
+  #uploadStatus.loading { background:linear-gradient(135deg,var(--pink-soft),var(--yellow-light)); border:1.5px solid var(--pink-light); color:var(--pink); }
+  .back-btn { margin-top:16px; background:none; border:1.5px solid var(--border); color:var(--text-light); padding:10px 24px; border-radius:50px; font-size:0.86rem; font-weight:600; cursor:pointer; transition:all 0.2s; font-family:'Inter',sans-serif; }
+  .back-btn:hover { border-color:var(--pink-light); color:var(--pink); }
 
-  /* ── RAG debug panel ── */
-  .rag-panel { background: #fafafa; border: 1px solid #e2e8f0;
-               border-radius: 8px; padding: 16px; margin-top: 10px; }
-  .rag-title { font-family: var(--mono); font-size: 0.75rem; color: var(--muted);
-               letter-spacing: 0.08em; margin-bottom: 12px; font-weight: 700; }
-  .rag-item  { display: flex; justify-content: space-between; padding: 8px 0;
-               border-bottom: 1px solid #e2e8f0; font-family: var(--mono);
-               font-size: 0.85rem; color: #4a5568; }
-  .rag-item:last-child { border-bottom: none; padding-bottom: 0; }
-  .rag-score { color: var(--accent); font-weight: 600; }
+  /* ======================== PAGE 3 — CHAT ======================== */
+  #page-chat { flex-direction:row; min-height:100vh; background:var(--warm-bg); }
 
-  /* ── Loading ── */
-  .loading { display: flex; align-items: center; gap: 12px; padding: 30px 0;
-             font-family: var(--mono); font-size: 0.95rem; color: var(--accent); font-weight: 600; justify-content: center; }
-  .dot { width: 8px; height: 8px; background: var(--accent); border-radius: 50%;
-         animation: bounce 0.9s infinite; }
-  .dot:nth-child(2) { animation-delay: 0.15s; }
-  .dot:nth-child(3) { animation-delay: 0.3s; }
-  @keyframes bounce { 0%,100%{transform:translateY(0)} 45%{transform:translateY(-8px)} }
+  /* SIDEBAR */
+  .sidebar { width:252px; flex-shrink:0; background:white; border-right:1.5px solid var(--border); display:flex; flex-direction:column; padding:24px 16px; box-shadow:4px 0 20px rgba(255,107,157,0.06); }
+  .sidebar-logo { display:flex; align-items:center; gap:10px; padding:8px 10px; margin-bottom:24px; }
+  .logo-icon { width:38px; height:38px; background:linear-gradient(135deg,var(--pink),#ff9a44); border-radius:11px; display:flex; align-items:center; justify-content:center; font-size:1.15rem; flex-shrink:0; }
+  .logo-text { font-size:1.05rem; font-weight:800; color:var(--text-dark); }
+  .logo-sub  { font-size:0.68rem; font-weight:600; color:var(--pink); letter-spacing:0.5px; }
+  .sidebar-section-title { font-size:0.68rem; font-weight:700; letter-spacing:1.5px; text-transform:uppercase; color:var(--text-light); padding:0 10px; margin-bottom:6px; margin-top:16px; }
+  .nav-link { display:flex; align-items:center; gap:10px; padding:11px 12px; border-radius:13px; border:none; background:none; font-family:'Inter',sans-serif; font-size:0.88rem; font-weight:600; color:var(--text-mid); cursor:pointer; width:100%; text-align:left; transition:all 0.2s ease; }
+  .nav-link:hover { background:var(--pink-soft); color:var(--pink); }
+  .nav-link.active { background:linear-gradient(135deg,var(--pink-soft),var(--yellow-light)); color:var(--pink); box-shadow:0 3px 14px rgba(255,107,157,0.12); }
+  .nav-icon { width:30px; height:30px; border-radius:9px; display:flex; align-items:center; justify-content:center; font-size:0.95rem; background:rgba(255,107,157,0.08); flex-shrink:0; }
+  .nav-link.active .nav-icon { background:rgba(255,107,157,0.18); }
+  .sidebar-doc-info { margin-top:auto; padding:14px; background:linear-gradient(135deg,var(--pink-soft),var(--sky-light)); border-radius:14px; border:1.5px solid var(--pink-light); }
+  .doc-label  { font-size:0.68rem; font-weight:700; color:var(--text-light); letter-spacing:1px; text-transform:uppercase; margin-bottom:5px; }
+  .doc-name   { font-size:0.85rem; font-weight:700; color:var(--text-dark); word-break:break-all; }
+  .doc-chunks { font-size:0.75rem; color:var(--text-mid); margin-top:3px; }
 
-  /* ── Footer ── */
-  footer { background: var(--surface); border-top: 1px solid var(--border);
-           padding: 24px; text-align: center; color: var(--muted); font-size: 0.95rem;
-           margin-top: auto; display: flex; flex-direction: column; gap: 6px; }
-  .footer-name { font-weight: 800; color: var(--text); font-size: 1.05rem; }
-  .footer-email { color: var(--accent); font-family: var(--mono); font-size: 0.9rem; }
+  /* MAIN PANEL */
+  .main-panel { flex:1; display:flex; flex-direction:column; overflow:hidden; }
+  .top-bar { background:white; border-bottom:1.5px solid var(--border); padding:14px 26px; display:flex; align-items:center; justify-content:space-between; flex-shrink:0; }
+  .top-bar-title { font-size:1rem; font-weight:700; color:var(--text-dark); }
+  .top-bar-status { display:flex; align-items:center; gap:8px; font-size:0.8rem; font-weight:600; color:#1a7a4a; background:linear-gradient(135deg,#f0fff8,#e8f5ff); border:1px solid #a8e6cf; padding:5px 14px; border-radius:50px; }
+  .status-dot { width:7px; height:7px; background:#22c55e; border-radius:50%; animation:pulseDot 1.5s infinite; }
 
-  @media (max-width: 900px) { main { grid-template-columns: 1fr; } body { flex-direction: column; } aside { width: 100%; height: auto; border-right: none; border-bottom: 1px solid var(--border); } nav { flex-direction: row; flex-wrap: wrap; padding: 10px; gap: 10px; } nav a { padding: 8px 16px; border-left: none; border-bottom: 3px solid transparent; } nav a:hover, nav a.active { border-left: none; border-bottom-color: var(--accent); } }
+  /* PANELS */
+  .panel-section { display:none; flex:1; overflow:hidden; flex-direction:column; }
+  .panel-section.active { display:flex; animation:pageIn 0.4s ease forwards; }
+
+  /* CHAT */
+  .chat-messages { flex:1; overflow-y:auto; padding:24px 28px; display:flex; flex-direction:column; gap:18px; }
+  .chat-welcome { text-align:center; padding:50px 20px; }
+  .chat-welcome .welcome-icon { font-size:3.2rem; margin-bottom:14px; }
+  .chat-welcome h3 { font-size:1.3rem; font-weight:700; color:var(--text-dark); margin-bottom:8px; }
+  .chat-welcome p { font-size:0.92rem; color:var(--text-mid); line-height:1.6; max-width:380px; margin:auto; }
+  .suggest-chips { display:flex; gap:10px; flex-wrap:wrap; justify-content:center; margin-top:20px; }
+  .chip { background:white; border:1.5px solid var(--border); color:var(--text-dark); padding:8px 16px; border-radius:50px; font-size:0.8rem; font-weight:600; cursor:pointer; transition:all 0.2s; font-family:'Inter',sans-serif; }
+  .chip:hover { border-color:var(--pink); color:var(--pink); background:var(--pink-soft); }
+
+  .msg-wrap { display:flex; flex-direction:column; gap:4px; }
+  .msg-wrap.user { align-items:flex-end; }
+  .msg-wrap.bot  { align-items:flex-start; }
+  .msg-bubble { max-width:80%; padding:14px 20px; border-radius:20px; font-size:0.96rem; line-height:1.75; font-weight:500; }
+  .msg-wrap.user .msg-bubble { background:linear-gradient(135deg,var(--pink) 0%,#ff9a44 100%); color:white; border-bottom-right-radius:5px; box-shadow:0 6px 20px rgba(255,107,157,0.3); }
+  .msg-wrap.bot  .msg-bubble { background:white; color:var(--text-dark); border-bottom-left-radius:5px; border:1px solid var(--border); box-shadow:var(--shadow-lg); }
+  
+  /* Markdown Styles for Bot */
+  .msg-wrap.bot .msg-bubble p { margin-bottom: 0.9em; }
+  .msg-wrap.bot .msg-bubble p:last-child { margin-bottom: 0; }
+  .msg-wrap.bot .msg-bubble a { color: var(--sky-mid); text-decoration: none; font-weight: 700; border-bottom: 1.5px solid transparent; transition: all 0.2s; }
+  .msg-wrap.bot .msg-bubble a:hover { border-bottom-color: var(--sky-mid); color: #2b7da8; }
+  .msg-wrap.bot .msg-bubble ul, .msg-wrap.bot .msg-bubble ol { margin-left: 24px; margin-bottom: 0.9em; padding-left: 0; }
+  .msg-wrap.bot .msg-bubble li { margin-bottom: 0.4em; }
+  .msg-wrap.bot .msg-bubble li::marker { color: var(--pink); font-weight: 800; }
+  .msg-wrap.bot .msg-bubble code { background: var(--warm-bg); padding: 3px 6px; border-radius: 6px; font-family: monospace; font-size: 0.88rem; color: #d0306c; border: 1px solid var(--border); }
+  .msg-wrap.bot .msg-bubble pre { background: var(--text-dark); color: #f8f8f2; padding: 14px 18px; border-radius: 12px; overflow-x: auto; margin-bottom: 0.9em; border: 1px solid rgba(0,0,0,0.1); }
+  .msg-wrap.bot .msg-bubble pre code { background: none; color: inherit; padding: 0; border: none; font-size: 0.85rem; }
+  .msg-wrap.bot .msg-bubble strong, .msg-wrap.bot .msg-bubble b { font-weight: 700; color: #1a1a1a; }
+  .msg-wrap.bot .msg-bubble h1, .msg-wrap.bot .msg-bubble h2, .msg-wrap.bot .msg-bubble h3 { font-size: 1.1rem; margin-top: 1em; margin-bottom: 0.6em; font-weight: 800; color: var(--text-dark); border-bottom: 1px solid var(--border); padding-bottom: 4px; }
+  .msg-wrap.bot .msg-bubble h1:first-child, .msg-wrap.bot .msg-bubble h2:first-child, .msg-wrap.bot .msg-bubble h3:first-child { margin-top: 0; }
+
+  .msg-meta { font-size:0.73rem; color:var(--text-light); font-weight:500; display:flex; gap:6px; align-items:center; }
+  .latency-badge { background:linear-gradient(135deg,var(--yellow-light),var(--sky-light)); border:1px solid var(--yellow-warm); color:#9a6700; padding:2px 10px; border-radius:50px; font-size:0.7rem; font-weight:700; }
+  .chunks-badge  { background:var(--sky-light); border:1px solid #aadaff; color:var(--sky-mid); padding:2px 10px; border-radius:50px; font-size:0.7rem; font-weight:700; }
+  .typing-bubble { background:white; border:1.5px solid var(--border); padding:13px 18px; border-radius:20px; border-bottom-left-radius:5px; box-shadow:var(--shadow); display:flex; gap:6px; align-items:center; }
+  .typing-dot { width:8px; height:8px; background:var(--pink-light); border-radius:50%; animation:typingBounce 1.4s ease-in-out infinite; }
+  .typing-dot:nth-child(2) { animation-delay:0.2s; }
+  .typing-dot:nth-child(3) { animation-delay:0.4s; }
+  @keyframes typingBounce { 0%,80%,100% { transform:translateY(0); } 40% { transform:translateY(-8px); } }
+
+  .chat-input-area { padding:18px 24px; background:white; border-top:1.5px solid var(--border); display:flex; gap:12px; align-items:flex-end; flex-shrink:0; }
+  .chat-input-wrap { flex:1; background:var(--warm-bg); border:2px solid var(--border); border-radius:18px; padding:11px 16px; transition:border-color 0.2s; }
+  .chat-input-wrap:focus-within { border-color:var(--pink-light); }
+  #chatInput { width:100%; background:none; border:none; outline:none; font-family:'Inter',sans-serif; font-size:0.93rem; color:var(--text-dark); resize:none; max-height:120px; overflow-y:auto; min-height:22px; }
+  #chatInput::placeholder { color:var(--text-light); }
+  .send-btn { width:46px; height:46px; background:linear-gradient(135deg,var(--pink),#ff9a44); border:none; border-radius:14px; color:white; font-size:1.15rem; cursor:pointer; box-shadow:0 4px 16px rgba(255,107,157,0.35); transition:all 0.2s; flex-shrink:0; display:flex; align-items:center; justify-content:center; }
+  .send-btn:hover { transform:scale(1.06); }
+  .send-btn:disabled { opacity:0.5; cursor:not-allowed; transform:none; }
+
+  /* METRICS */
+  .metrics-wrap { flex:1; overflow-y:auto; padding:28px; }
+  .metrics-header { margin-bottom:24px; }
+  .metrics-header h2 { font-size:1.5rem; font-weight:800; color:var(--text-dark); margin-bottom:5px; }
+  .metrics-header p  { color:var(--text-mid); font-size:0.9rem; }
+  .metrics-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); gap:18px; margin-bottom:28px; }
+  .metric-card { background:white; border-radius:22px; padding:26px 20px; border:1.5px solid var(--border); box-shadow:var(--shadow); text-align:center; transition:transform 0.2s; }
+  .metric-card:hover { transform:translateY(-4px); }
+  .metric-card .m-icon  { font-size:1.9rem; margin-bottom:10px; }
+  .metric-card .m-label { font-size:0.7rem; font-weight:700; letter-spacing:1.2px; text-transform:uppercase; color:var(--text-light); margin-bottom:7px; }
+  .metric-card .m-value { font-size:2.4rem; font-weight:900; line-height:1; background:linear-gradient(135deg,var(--pink),#ff9a44); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; }
+  .metric-card .m-value.sky { background:linear-gradient(135deg,var(--sky-mid),var(--sky)); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; }
+  .metric-card .m-unit  { font-size:0.9rem; font-weight:600; color:var(--text-light); margin-top:3px; }
+  .metrics-history { background:white; border-radius:22px; padding:24px; border:1.5px solid var(--border); box-shadow:var(--shadow); }
+  .metrics-history h3 { font-size:1rem; font-weight:700; color:var(--text-dark); margin-bottom:14px; }
+  .history-table { width:100%; border-collapse:collapse; }
+  .history-table th { text-align:left; font-size:0.7rem; font-weight:700; letter-spacing:1px; text-transform:uppercase; color:var(--text-light); padding:7px 11px; border-bottom:1.5px solid var(--border); }
+  .history-table td { padding:11px 11px; font-size:0.86rem; font-weight:500; color:var(--text-dark); border-bottom:1px solid var(--border); vertical-align:top; }
+  .history-table tr:last-child td { border-bottom:none; }
+  .no-data { text-align:center; color:var(--text-light); padding:36px; font-size:0.88rem; }
+
+  /* ======================== PAGE 4 — ABOUT TEAM ======================== */
+  #page-about {
+    flex-direction:column; align-items:center;
+    min-height:100vh; padding:60px 24px 80px;
+    background:linear-gradient(135deg,#fff5fa 0%,#fffef0 50%,#f0f9ff 100%);
+    position:relative;
+  }
+  .about-back { position:absolute; top:28px; left:32px; z-index:10; cursor:pointer; background:white; border:1.5px solid var(--border); color:var(--text-mid); padding:10px 22px; border-radius:50px; font-size:0.86rem; font-weight:600; font-family:'Inter',sans-serif; transition:all 0.2s; box-shadow:0 3px 12px rgba(0,0,0,0.05); }
+  .about-back:hover { border-color:var(--pink-light); color:var(--pink); }
+  .about-hero { position:relative; z-index:1; text-align:center; margin-bottom:56px; margin-top:20px; }
+  .about-hero .badge { margin-bottom:20px; }
+  .about-hero h1 { font-size:clamp(2rem,4vw,3.2rem); font-weight:900; color:var(--text-dark); margin-bottom:14px; }
+  .about-hero h1 span { background:linear-gradient(135deg,var(--pink),#ff9a44); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; }
+  .about-hero p { color:var(--text-mid); font-size:1rem; line-height:1.75; max-width:560px; margin:auto; }
+  .team-grid { display:flex; gap:28px; justify-content:center; flex-wrap:wrap; position:relative; z-index:1; }
+  .team-card { background:white; border-radius:28px; padding:44px 36px; border:1.5px solid var(--border); box-shadow:var(--shadow-lg); width:320px; text-align:center; transition:all 0.35s ease; }
+  .team-card:hover { transform:translateY(-8px); box-shadow:0 28px 70px rgba(255,107,157,0.18); }
+  .avatar { width:110px; height:110px; border-radius:50%; margin:0 auto 20px; border:4px solid var(--pink-light); box-shadow:0 8px 28px rgba(255,107,157,0.22); }
+  .team-card h3 { font-size:1.35rem; font-weight:800; color:var(--text-dark); margin-bottom:6px; }
+  .team-card .role { font-size:0.76rem; font-weight:700; letter-spacing:1px; text-transform:uppercase; color:var(--pink); margin-bottom:10px; }
+  .team-card .bio  { font-size:0.88rem; color:var(--text-mid); line-height:1.6; margin-bottom:24px; }
+  .team-links { display:flex; gap:12px; justify-content:center; }
+  .team-link { padding:10px 24px; border-radius:12px; font-size:0.84rem; font-weight:700; text-decoration:none; transition:all 0.2s; border:1.5px solid var(--border); color:var(--text-dark); }
+  .team-link.github:hover   { border-color:#1a1a1a; background:#1a1a1a; color:white; }
+  .team-link.linkedin        { color:#0a66c2; }
+  .team-link.linkedin:hover  { border-color:#0a66c2; background:#0a66c2; color:white; }
+
+  .project-strip {
+    margin-top: 64px; position:relative; z-index:1;
+    background:white; border:1.5px solid var(--border);
+    border-radius:28px; padding:40px 48px;
+    max-width:720px; width:100%;
+    box-shadow:var(--shadow);
+    text-align:center;
+  }
+  .project-strip h3 { font-size:1.25rem; font-weight:800; color:var(--text-dark); margin-bottom:16px; }
+  .tech-pills { display:flex; gap:12px; justify-content:center; flex-wrap:wrap; }
+  .tech-pill { background:linear-gradient(135deg,var(--pink-soft),var(--yellow-light)); border:1.5px solid var(--pink-light); color:var(--text-dark); padding:8px 18px; border-radius:50px; font-size:0.82rem; font-weight:700; }
 </style>
 </head>
 <body>
 
-<!-- SIDEBAR -->
-<aside>
-  <div class="logo-area">
-    <div class="logo">VB PROJECT</div>
+<!-- ======================================================= -->
+<!-- PAGE 1: LANDING                                          -->
+<!-- ======================================================= -->
+<div id="page-landing" class="page active">
+  <div class="blob-wrap">
+    <div class="blob blob-1"></div>
+    <div class="blob blob-2"></div>
+    <div class="blob blob-3"></div>
+    <div class="pulse-ring"></div>
+    <div class="pulse-ring"></div>
+    <div class="pulse-ring"></div>
   </div>
-  <nav>
-    <a href="#" id="tab-dashboard" class="active" onclick="switchTab('dashboard')">🏥 Triage Dashboard</a>
-    <a href="#" id="tab-upload" onclick="switchTab('upload')">📁 Patient Upload</a>
-    <a href="#" id="tab-records" onclick="switchTab('records')">📋 Patient Records</a>
-    <a href="#" id="tab-analytics" onclick="switchTab('analytics')">📈 Analytics</a>
-    <a href="#" id="tab-resources" onclick="switchTab('resources')">⚕️ Resources</a>
-    <a href="#" id="tab-developer" onclick="switchTab('developer')" style="margin-top: auto; border-top: 1px solid var(--border);">👨‍💻 About Developer</a>
-  </nav>
-</aside>
 
-<!-- MAIN APP AREA -->
-<div class="layout-wrapper">
-  
-  <header>
-    <div class="header-title">Aegis: Advanced Medical Intelligence</div>
-    <div style="display:flex;gap:10px;">
-      <span class="badge live">● LIVE SYSTEM</span>
-      <span class="badge">RAG + ICP RULES</span>
+  <div class="landing-content">
+    <div class="badge"><div class="badge-dot"></div>RAG-Powered · Live AI · Medical Grade</div>
+    <h1 class="hero-title">MedRAG<br>Doctor Assistant</h1>
+    <p class="hero-desc">An intelligent assistant for medical professionals. Upload prescriptions or clinical documents and get instant, AI-powered answers — grounded strictly in your document with zero hallucinations.</p>
+    <div class="hero-features">
+      <div class="feature-pill"><span>🧠</span> RAG Pipeline</div>
+      <div class="feature-pill"><span>⚡</span> Low Latency</div>
+      <div class="feature-pill"><span>🔒</span> Grounded Answers</div>
+      <div class="feature-pill"><span>💊</span> Medical AI</div>
     </div>
-  </header>
-
-  <main>
-    <!-- DASHBOARD SECTION -->
-    <div id="dashboard-section" style="display: contents;">
-      <!-- LEFT: Input panel -->
-      <div class="card">
-        <div class="card-title">PATIENT INTAKE</div>
-
-      <div class="field">
-        <label>Quick Scenarios</label>
-        <div class="scenarios">
-          <button class="sc-btn" onclick="load(0)">🫀 STEMI</button>
-          <button class="sc-btn" onclick="load(1)">🧠 Stroke</button>
-          <button class="sc-btn" onclick="load(2)">🩸 Trauma</button>
-          <button class="sc-btn" onclick="load(3)">😮 Anaphylaxis</button>
-          <button class="sc-btn" onclick="load(4)">🤒 Sepsis</button>
-          <button class="sc-btn" onclick="load(5)">💉 DKA</button>
-        </div>
-      </div>
-
-      <div class="field" style="margin-top: 4px;">
-        <label>Symptoms / Presentation *</label>
-        <textarea id="symptoms" rows="5"
-          placeholder="Enter patient's chief complaint, vitals, onset, findings..."></textarea>
-      </div>
-
-      <div class="field">
-        <label>Patient History (optional)</label>
-        <textarea id="history" rows="3"
-          placeholder="Known conditions, medications, allergies, recent visits..."></textarea>
-      </div>
-
-      <button class="run-btn" id="runBtn" onclick="runTriage()">
-        ⚡ Run Triage Analysis
-      </button>
+    <button class="btn-primary" onclick="goToPage('page-upload')">Let's Start &nbsp;→</button>
+    <div style="margin-top:20px;">
+      <button onclick="goToPage('page-about')" style="background:none;border:none;cursor:pointer;color:var(--text-light);font-size:0.88rem;font-weight:600;font-family:'Inter',sans-serif;text-decoration:underline;text-underline-offset:3px;">👥 Meet the Team</button>
     </div>
-
-    <!-- RIGHT: Result panel -->
-    <div class="card">
-      <div class="card-title">TRIAGE ASSESSMENT</div>
-      <div class="result-area" id="resultArea">
-        <div class="empty-state">Select a scenario or enter patient details to begin triage...</div>
-      </div>
-      </div>
-    </div>
-
-    <!-- UPLOAD SECTION -->
-    <div id="upload-section" style="display: none; grid-column: 1 / -1; width: 100%; max-width: 800px; margin: 0 auto; padding-top: 40px;">
-      <div class="card" style="text-align: center; padding: 60px; border: 2px dashed var(--accent); cursor: pointer;" onclick="document.getElementById('patientFile').click()">
-        <div class="card-title" style="font-size: 1.2rem; margin-bottom: 20px;">UPLOAD PATIENT DOCUMENT</div>
-        <p style="color: var(--muted); margin-bottom: 30px; font-weight: 500; font-size: 1.05rem;">
-          Upload a patient's medical history, chief complaints, or text-based prescription files (.txt format). <br/>
-          The system will automatically parse the document and prepare the triage analysis.
-        </p>
-        <input type="file" id="patientFile" accept=".txt" style="display: none;" onchange="handleFileUpload(event)">
-        <button class="run-btn" style="width: auto; margin: 0 auto; padding: 15px 40px;" onclick="event.stopPropagation(); document.getElementById('patientFile').click()">
-          📄 Select .TXT File
-        </button>
-      </div>
-    </div>
-
-    <!-- NEW TABS SECTIONS -->
-    <div id="records-section" style="display: none; grid-column: 1 / -1; width: 100%; max-width: 800px; margin: 0 auto; padding-top: 40px;">
-      <div class="card" style="text-align: center; padding: 60px;">
-        <h2 style="color: var(--accent); margin-bottom: 15px;">📋 Patient Records</h2>
-        <p style="color: var(--muted); font-size: 1.1rem;">This module is currently offline. Connect to an EHR system to view historical records.</p>
-      </div>
-    </div>
-
-    <div id="analytics-section" style="display: none; grid-column: 1 / -1; width: 100%; max-width: 1000px; margin: 0 auto; padding-top: 20px;">
-      <h2 style="color: var(--accent); margin-bottom: 25px; font-size: 1.8rem; text-align: center;">📈 Session Triage Analytics</h2>
-      <p style="text-align: center; color: var(--muted); margin-bottom: 30px; font-size: 1.1rem;">These metrics dynamically update based on your last system query.</p>
-      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 24px;">
-        <div class="card" style="text-align: center; padding: 35px;">
-          <h3 style="color: var(--muted); font-size: 0.9rem; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 15px;">Last Response Latency</h3>
-          <p id="stat-latency" style="font-size: 2.8rem; font-weight: 800; color: var(--text);">--</p>
-          <p style="color: var(--muted); font-size: 0.9rem; font-weight: 700; margin-top: 8px;">Network + Engine Time</p>
-        </div>
-        <div class="card" style="text-align: center; padding: 35px;">
-          <h3 style="color: var(--muted); font-size: 0.9rem; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 15px;">AI Core Confidence</h3>
-          <p id="stat-confidence" style="font-size: 2.8rem; font-weight: 800; color: var(--text);">--</p>
-          <p style="color: var(--muted); font-size: 0.9rem; font-weight: 700; margin-top: 8px;">Based on RAG match</p>
-        </div>
-        <div class="card" style="text-align: center; padding: 35px;">
-          <h3 style="color: var(--muted); font-size: 0.9rem; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 15px;">Computed Priority</h3>
-          <p id="stat-priority" style="font-size: 2.5rem; font-weight: 800; color: var(--accent);">--</p>
-          <p style="color: var(--muted); font-size: 0.9rem; font-weight: 700; margin-top: 8px;">Standard ED Flow</p>
-        </div>
-      </div>
-    </div>
-
-    <div id="resources-section" style="display: none; grid-column: 1 / -1; width: 100%; max-width: 900px; margin: 0 auto; padding-top: 20px;">
-      <h2 style="color: var(--accent); margin-bottom: 25px; font-size: 1.8rem; text-align: center;">⚕️ Core RAG Clinical Protocols</h2>
-      <p style="text-align: center; color: var(--muted); margin-bottom: 30px; font-size: 1.1rem;">These are the foundational medical guidelines injected directly into the active Inference Engine.</p>
-      
-      <div style="display: flex; flex-direction: column; gap: 18px;">
-        
-        <div class="card" style="padding: 26px 36px; display: flex; justify-content: space-between; align-items: center; transition: all 0.2s;" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border)'">
-          <div>
-            <h3 style="color: var(--text); font-size: 1.2rem; margin-bottom: 6px; font-weight: 800;">AHA STEMI Guidelines</h3>
-            <p style="color: var(--muted); font-size: 1rem; font-weight: 500;">Protocol for suspected Acute ST-Elevation Myocardial Infarction.</p>
-          </div>
-          <button class="sc-btn" style="color: var(--accent); border-color: var(--accent); padding: 10px 20px;" onclick="alert('Viewing Core Protocol: AHA STEMI')">View Details</button>
-        </div>
-
-        <div class="card" style="padding: 26px 36px; display: flex; justify-content: space-between; align-items: center; transition: all 0.2s;" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border)'">
-          <div>
-            <h3 style="color: var(--text); font-size: 1.2rem; margin-bottom: 6px; font-weight: 800;">AHA/ASA Acute Ischemic Stroke</h3>
-            <p style="color: var(--muted); font-size: 1rem; font-weight: 500;">Time-sensitive workflow and tPA screening criteria for stroke presentation.</p>
-          </div>
-          <button class="sc-btn" style="color: var(--accent); border-color: var(--accent); padding: 10px 20px;" onclick="alert('Viewing Core Protocol: AHA Ischemic Stroke')">View Details</button>
-        </div>
-
-        <div class="card" style="padding: 26px 36px; display: flex; justify-content: space-between; align-items: center; transition: all 0.2s;" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border)'">
-          <div>
-            <h3 style="color: var(--text); font-size: 1.2rem; margin-bottom: 6px; font-weight: 800;">Surviving Sepsis Campaign</h3>
-            <p style="color: var(--muted); font-size: 1rem; font-weight: 500;">Adult screening, sepsis, and septic shock early goal-directed therapy.</p>
-          </div>
-          <button class="sc-btn" style="color: var(--accent); border-color: var(--accent); padding: 10px 20px;" onclick="alert('Viewing Core Protocol: Surviving Sepsis')">View Details</button>
-        </div>
-
-        <div class="card" style="padding: 26px 36px; display: flex; justify-content: space-between; align-items: center; transition: all 0.2s;" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border)'">
-          <div>
-            <h3 style="color: var(--text); font-size: 1.2rem; margin-bottom: 6px; font-weight: 800;">ATLS Major Trauma Outline</h3>
-            <p style="color: var(--muted); font-size: 1rem; font-weight: 500;">Primary triage mapping prioritizing ABCDE interventions.</p>
-          </div>
-          <button class="sc-btn" style="color: var(--accent); border-color: var(--accent); padding: 10px 20px;" onclick="alert('Viewing Core Protocol: ATLS Major Trauma')">View Details</button>
-        </div>
-
-      </div>
-    </div>
-
-    <div id="developer-section" style="display: none; grid-column: 1 / -1; width: 100%; max-width: 1000px; margin: 0 auto; padding-top: 40px;">
-      <div style="display: flex; flex-wrap: wrap; gap: 30px; justify-content: center;">
-        
-        <div class="card" style="text-align: center; padding: 40px; flex: 1; min-width: 300px; max-width: 450px;">
-          <img src="https://ui-avatars.com/api/?name=Vaibhav+Sharma&background=ed64a6&color=fff&size=100&bold=true" style="border-radius: 50%; margin: 0 auto 20px auto; width: 100px; height: 100px;">
-          <h2 style="font-size: 2rem; color: var(--accent); margin-bottom: 10px;">Vaibhav Sharma</h2>
-          <p style="font-size: 1.1rem; color: var(--text); font-weight: 700; margin-bottom: 5px;">B.Tech Student - CSE AI/ML</p>
-          <p style="font-size: 1rem; color: var(--muted); margin-bottom: 30px; line-height: 1.6; font-weight: 500;">
-            Passionate about building intelligent AI-powered solutions like this robust clinical triage system.
-          </p>
-          <div style="display: flex; justify-content: center; gap: 15px;">
-            <a href="https://github.com/7vaibhav31" target="_blank" style="display: flex; align-items: center; gap: 8px; font-weight: 800; color: var(--text); text-decoration: none; padding: 8px 16px; border: 2px solid #e2e8f0; border-radius: 12px; transition: all 0.2s;">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg> GitHub
-            </a>
-            <a href="https://www.linkedin.com/in/vaibhav731/" target="_blank" style="display: flex; align-items: center; gap: 8px; font-weight: 800; color: #0a66c2; text-decoration: none; padding: 8px 16px; border: 2px solid #0a66c2; border-radius: 12px; transition: all 0.2s;">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M19 0h-14c-2.761 0-5 2.239-5 5v14c0 2.761 2.239 5 5 5h14c2.762 0 5-2.239 5-5v-14c0-2.761-2.238-5-5-5zm-11 19h-3v-11h3v11zm-1.5-12.268c-.966 0-1.75-.79-1.75-1.764s.784-1.764 1.75-1.764 1.75.79 1.75 1.764-.783 1.764-1.75 1.764zm13.5 12.268h-3v-5.604c0-3.368-4-3.113-4 0v5.604h-3v-11h3v1.765c1.396-2.586 7-2.777 7 2.476v6.759z"/></svg> LinkedIn
-            </a>
-          </div>
-        </div>
-
-        <div class="card" style="text-align: center; padding: 40px; flex: 1; min-width: 300px; max-width: 450px;">
-          <img src="https://ui-avatars.com/api/?name=Bhaskar+Mishra&background=ed64a6&color=fff&size=100&bold=true" style="border-radius: 50%; margin: 0 auto 20px auto; width: 100px; height: 100px;">
-          <h2 style="font-size: 2rem; color: var(--accent); margin-bottom: 10px;">Bhaskar Mishra</h2>
-          <p style="font-size: 1.1rem; color: var(--text); font-weight: 700; margin-bottom: 5px;">3rd-year B.Tech Explorer</p>
-          <p style="font-size: 1rem; color: var(--muted); margin-bottom: 30px; line-height: 1.6; font-weight: 500;">
-            A curious explorer turning code, data, and ideas into intelligent solutions.
-          </p>
-          <div style="display: flex; justify-content: center; gap: 15px;">
-            <a href="https://github.com/Bhaskar7462" target="_blank" style="display: flex; align-items: center; gap: 8px; font-weight: 800; color: var(--text); text-decoration: none; padding: 8px 16px; border: 2px solid #e2e8f0; border-radius: 12px; transition: all 0.2s;">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg> GitHub
-            </a>
-            <a href="https://www.linkedin.com/in/kumar-bhaskar-3727162b3" target="_blank" style="display: flex; align-items: center; gap: 8px; font-weight: 800; color: #0a66c2; text-decoration: none; padding: 8px 16px; border: 2px solid #0a66c2; border-radius: 12px; transition: all 0.2s;">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M19 0h-14c-2.761 0-5 2.239-5 5v14c0 2.761 2.239 5 5 5h14c2.762 0 5-2.239 5-5v-14c0-2.761-2.238-5-5-5zm-11 19h-3v-11h3v11zm-1.5-12.268c-.966 0-1.75-.79-1.75-1.764s.784-1.764 1.75-1.764 1.75.79 1.75 1.764-.783 1.764-1.75 1.764zm13.5 12.268h-3v-5.604c0-3.368-4-3.113-4 0v5.604h-3v-11h3v1.765c1.396-2.586 7-2.777 7 2.476v6.759z"/></svg> LinkedIn
-            </a>
-          </div>
-        </div>
-
-      </div>
-    </div>
-  </main>
-
-  <!-- FOOTER -->
-  <footer>
-    <div>Built with ♥ by <span class="footer-name">Vaibhav Sharma</span></div>
-    <div class="footer-email">Contact: m.7vansh31@gmail.com</div>
-  </footer>
+    <div class="scroll-hint"><span>scroll to explore</span><span style="font-size:1.1rem;">↓</span></div>
+  </div>
 </div>
 
-<script>
-// ── Tab Switching & Upload Logic ───────────────────────────────
-function switchTab(tab) {
-  // Update sidebar active state
-  document.querySelectorAll('nav a').forEach(a => a.classList.remove('active'));
-  document.getElementById('tab-' + tab).classList.add('active');
+<!-- ======================================================= -->
+<!-- PAGE 2: UPLOAD                                           -->
+<!-- ======================================================= -->
+<div id="page-upload" class="page" style="flex-direction:column;align-items:center;justify-content:center;background:linear-gradient(135deg,#fff9f0 0%,#fff5fa 50%,#f5f5ff 100%);min-height:100vh;padding:60px 20px;position:relative;">
+  <div class="blob-wrap" style="opacity:0.45;">
+    <div class="blob blob-1" style="opacity:0.10;"></div>
+    <div class="blob blob-2" style="opacity:0.09;"></div>
+  </div>
 
-  // Toggle all sections
-  const tabs = ['dashboard', 'upload', 'records', 'analytics', 'resources', 'developer'];
-  tabs.forEach(t => {
-    let el = document.getElementById(t + '-section');
-    if(el) {
-      if(t === tab) {
-        el.style.display = (t === 'dashboard') ? 'contents' : 'block';
-      } else {
-        el.style.display = 'none';
-      }
-    }
-  });
+  <div class="upload-card">
+    <div class="upload-icon-wrap">📄</div>
+    <h1>Upload Your Document</h1>
+    <p>Upload a prescription or medical document (.txt). It will be indexed into the RAG pipeline and become the AI knowledge base.</p>
+
+    <div class="drop-zone" onclick="document.getElementById('fileInput').click()">
+      <input type="file" id="fileInput" accept=".txt" style="display:none" onchange="handleUpload(event)">
+      <div class="dz-icon">📋</div>
+      <h3>Drop document here or click to browse</h3>
+      <small>Supports .txt · Prescription, clinical notes, patient records</small>
+    </div>
+
+    <div id="uploadStatus"></div>
+    <div style="margin-top:20px;display:flex;gap:12px;justify-content:center;">
+      <button class="back-btn" onclick="goToPage('page-landing')">← Back to Home</button>
+      <button class="back-btn" onclick="goToPage('page-about')">👥 About Team</button>
+    </div>
+  </div>
+</div>
+
+<!-- ======================================================= -->
+<!-- PAGE 3: CHAT                                             -->
+<!-- ======================================================= -->
+<div id="page-chat" class="page">
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+    <div class="sidebar-logo">
+      <div class="logo-icon">🩺</div>
+      <div>
+        <div class="logo-text">MedRAG</div>
+        <div class="logo-sub">Doctor Assistant</div>
+      </div>
+    </div>
+
+    <div class="sidebar-section-title">Navigation</div>
+    <button class="nav-link active" data-panel="chat-panel" onclick="switchPanel(this, 'RAG Question & Answer')">
+      <div class="nav-icon">💬</div>Ask RAG
+    </button>
+    <button class="nav-link" data-panel="metrics-panel" onclick="switchPanel(this, 'Metrics Analysis')">
+      <div class="nav-icon">📊</div>Metrics Analysis
+    </button>
+
+    <div class="sidebar-section-title">More</div>
+    <button class="nav-link" onclick="goToPage('page-about')">
+      <div class="nav-icon">👥</div>About Team
+    </button>
+    <button class="nav-link" onclick="goToPage('page-upload')" style="color:var(--text-light);font-weight:500;">
+      <div class="nav-icon" style="background:rgba(135,206,235,0.15);">↑</div>Upload New Doc
+    </button>
+
+    <div class="sidebar-doc-info" id="docInfoBox" style="display:none;">
+      <div class="doc-label">📁 Active Document</div>
+      <div class="doc-name" id="docNameDisplay">—</div>
+      <div class="doc-chunks" id="docChunksDisplay"></div>
+    </div>
+  </aside>
+
+  <!-- MAIN PANEL -->
+  <div class="main-panel">
+    <div class="top-bar">
+      <span class="top-bar-title" id="panelTitle">RAG Question & Answer</span>
+      <div class="top-bar-status">
+        <div class="status-dot"></div>RAG Engine Online
+      </div>
+    </div>
+
+    <!-- CHAT PANEL -->
+    <div id="chat-panel" class="panel-section active" style="flex:1;overflow:hidden;flex-direction:column;display:flex;">
+      <div class="chat-messages" id="chatMessages">
+        <div class="chat-welcome" id="chatWelcome">
+          <div class="welcome-icon">🩺</div>
+          <h3>Ready to assist you</h3>
+          <p>Your document is loaded into the RAG pipeline. Ask any clinical question and get precise, grounded answers.</p>
+          <div class="suggest-chips">
+            <div class="chip" onclick="useChip(this)">What medication is prescribed?</div>
+            <div class="chip" onclick="useChip(this)">What is the recommended dosage?</div>
+            <div class="chip" onclick="useChip(this)">Are there any drug interactions?</div>
+            <div class="chip" onclick="useChip(this)">What is the patient's diagnosis?</div>
+          </div>
+        </div>
+      </div>
+      <div class="chat-input-area">
+        <div class="chat-input-wrap">
+          <textarea id="chatInput" placeholder="Ask a clinical question about the document…" rows="1"
+            onkeydown="handleKey(event)" oninput="autoResize(this)"></textarea>
+        </div>
+        <button class="send-btn" id="sendBtn" onclick="sendMessage()">➤</button>
+      </div>
+    </div>
+
+    <!-- METRICS PANEL -->
+    <div id="metrics-panel" class="panel-section">
+      <div class="metrics-wrap">
+        <div class="metrics-header">
+          <h2>📊 Metrics Analysis</h2>
+          <p>Live performance telemetry from your RAG pipeline queries.</p>
+        </div>
+        <div class="metrics-grid">
+          <div class="metric-card"><div class="m-icon">⚡</div><div class="m-label">Avg Latency</div><div class="m-value" id="mAvgLatency">--</div><div class="m-unit">ms</div></div>
+          <div class="metric-card"><div class="m-icon">🔥</div><div class="m-label">Last Latency</div><div class="m-value" id="mLastLatency">--</div><div class="m-unit">ms</div></div>
+          <div class="metric-card"><div class="m-icon">🚀</div><div class="m-label">Token Speed</div><div class="m-value sky" id="mTPS">--</div><div class="m-unit">tokens/sec</div></div>
+          <div class="metric-card"><div class="m-icon">🧮</div><div class="m-label">Total Tokens</div><div class="m-value sky" id="mTokens">--</div><div class="m-unit">tokens</div></div>
+          <div class="metric-card"><div class="m-icon">🎯</div><div class="m-label">Avg Confidence</div><div class="m-value" id="mConfidence">--</div><div class="m-unit">%</div></div>
+          <div class="metric-card"><div class="m-icon">💬</div><div class="m-label">Queries Asked</div><div class="m-value" id="mQueries">0</div><div class="m-unit">total</div></div>
+        </div>
+        <div class="metrics-history">
+          <h3>Query History Log</h3>
+          <table class="history-table">
+            <thead><tr><th>#</th><th>Question</th><th>Latency</th><th>Tokens</th><th>Confidence</th></tr></thead>
+            <tbody id="metricsTableBody">
+              <tr><td colspan="5" class="no-data">No queries yet. Ask something in the Chat tab!</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div><!-- /main-panel -->
+</div><!-- /page-chat -->
+
+<!-- ======================================================= -->
+<!-- PAGE 4: ABOUT TEAM (FULL PAGE)                          -->
+<!-- ======================================================= -->
+<div id="page-about" class="page" style="background:linear-gradient(135deg,#fff5fa 0%,#fffef0 55%,#f0f9ff 100%);flex-direction:column;align-items:center;min-height:100vh;position:relative;padding:70px 24px 80px;">
+  <div class="blob-wrap" style="opacity:0.6;">
+    <div class="blob blob-1" style="opacity:0.13;"></div>
+    <div class="blob blob-2" style="opacity:0.11;"></div>
+    <div class="blob blob-3" style="opacity:0.10;"></div>
+  </div>
+
+  <button class="about-back" id="aboutBackBtn" onclick="goBackFromAbout()">← Go Back</button>
+
+  <div class="about-hero">
+    <div class="badge"><div class="badge-dot"></div>Development Team</div>
+    <h1>Meet the <span>Builders</span></h1>
+    <p>Passionate AI engineers building production-grade RAG pipelines for real-world medical document intelligence.</p>
+  </div>
+
+  <div class="team-grid">
+    <div class="team-card">
+      <img class="avatar" src="https://ui-avatars.com/api/?name=Vaibhav+Sharma&background=ff6b9d&color=fff&size=200&bold=true" alt="Vaibhav Sharma">
+      <h3>Vaibhav Sharma</h3>
+      <div class="role">B.Tech · CSE AI/ML</div>
+      <p class="bio">Final-year AI/ML engineer passionate about RAG systems, LLMs, and building intelligent medical applications that make a real difference.</p>
+      <div class="team-links">
+        <a class="team-link github"   href="https://github.com/7vaibhav31" target="_blank">GitHub</a>
+        <a class="team-link linkedin" href="https://www.linkedin.com/in/vaibhav731/" target="_blank">LinkedIn</a>
+      </div>
+    </div>
+
+    <div class="team-card">
+      <img class="avatar" src="https://ui-avatars.com/api/?name=Bhaskar+Mishra&background=5ba3c9&color=fff&size=200&bold=true" alt="Bhaskar Mishra">
+      <h3>Bhaskar Mishra</h3>
+      <div class="role">3rd Year · B.Tech</div>
+      <p class="bio">Backend developer and ML enthusiast focused on building scalable AI systems. Loves working on challenging real-world problems with data and models.</p>
+      <div class="team-links">
+        <a class="team-link github"   href="https://github.com/Bhaskar7462" target="_blank">GitHub</a>
+        <a class="team-link linkedin" href="https://www.linkedin.com/in/kumar-bhaskar-3727162b3" target="_blank">LinkedIn</a>
+      </div>
+    </div>
+  </div>
+
+  <div class="project-strip">
+    <h3>🛠️ Built With</h3>
+    <div class="tech-pills">
+      <div class="tech-pill">🐍 Python + Flask</div>
+      <div class="tech-pill">🧠 RAG Pipeline</div>
+      <div class="tech-pill">🤖 OpenRouter API</div>
+      <div class="tech-pill">📄 TF-IDF Retrieval</div>
+      <div class="tech-pill">💅 Vanilla CSS</div>
+      <div class="tech-pill">⚡ Low Latency Design</div>
+    </div>
+  </div>
+</div>
+
+<!-- ======================================================= -->
+<!-- JAVASCRIPT                                              -->
+<!-- ======================================================= -->
+<script>
+// ----------------------------------------------------------------
+// PAGE NAV
+// ----------------------------------------------------------------
+let previousPage = 'page-landing';
+
+function goToPage(pageId) {
+  const current = document.querySelector('.page.active');
+  if (current) previousPage = current.id;
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.getElementById(pageId).classList.add('active');
+  window.scrollTo(0, 0);
+  if (pageId === 'page-chat') setTimeout(() => document.getElementById('chatInput').focus(), 350);
 }
 
-function handleFileUpload(event) {
-  const file = event.target.files[0];
-  if (!file) return;
+function goBackFromAbout() {
+  goToPage(previousPage || 'page-landing');
+}
 
-  // Reset value so same file can be uploaded again if needed
-  event.target.value = '';
+// ----------------------------------------------------------------
+// PANEL SWITCH (inside page 3)
+// ----------------------------------------------------------------
+function switchPanel(btn, title) {
+  document.querySelectorAll('.nav-link').forEach(l => l.classList.remove('active'));
+  btn.classList.add('active');
+  const panelId = btn.getAttribute('data-panel');
+  document.querySelectorAll('.panel-section').forEach(p => p.classList.remove('active'));
+  document.getElementById(panelId).classList.add('active');
+  document.getElementById('panelTitle').textContent = title;
+}
+
+// ----------------------------------------------------------------
+// UPLOAD
+// ----------------------------------------------------------------
+let loadedDocName = '', loadedChunks = 0;
+
+async function handleUpload(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const statusEl = document.getElementById('uploadStatus');
+  statusEl.style.display = 'block';
+  statusEl.className = 'loading';
+  statusEl.innerHTML = `<div style="display:flex;align-items:center;gap:10px;justify-content:center;"><div class="spinner" style="border-color:rgba(255,107,157,0.3);border-top-color:var(--pink);"></div>&nbsp;Indexing <strong>${file.name}</strong> into RAG pipeline…</div>`;
 
   const reader = new FileReader();
-  reader.onload = function(e) {
-    const text = e.target.result;
-    
-    // Switch to dashboard
-    switchTab('dashboard');
-    
-    // Populate symptoms textarea
-    const symptomsField = document.getElementById("symptoms");
-    symptomsField.value = "[[ DOCUMENT UPLOAD: " + file.name + " ]]\\n\\n" + text;
-    
-    // Visual feedback
-    symptomsField.style.transition = "all 0.3s";
-    symptomsField.style.borderColor = "var(--accent)";
-    symptomsField.style.boxShadow = "0 0 0 3px rgba(237,100,166,0.15)";
-    setTimeout(() => {
-      symptomsField.style.borderColor = "#e2e8f0";
-      symptomsField.style.boxShadow = "inset 0 2px 4px rgba(0,0,0,0.02)";
-      
-      // Auto-run the triage
-      runTriage();
-    }, 500);
+  reader.onload = async (ev) => {
+    try {
+      const res  = await fetch('/api/upload', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ text: ev.target.result }) });
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+      loadedDocName = file.name;
+      loadedChunks  = data.chunks;
+      statusEl.className = 'success';
+      statusEl.innerHTML = `✅ <strong>${file.name}</strong> indexed into <strong>${data.chunks} context fragments</strong>. Routing to AI assistant…`;
+      setTimeout(() => {
+        goToPage('page-chat');
+        document.getElementById('docInfoBox').style.display = 'block';
+        document.getElementById('docNameDisplay').textContent  = loadedDocName;
+        document.getElementById('docChunksDisplay').textContent = `${loadedChunks} context chunks`;
+      }, 1600);
+    } catch (err) {
+      statusEl.className = 'error';
+      statusEl.innerHTML = `❌ Upload failed: ${err.message}`;
+    }
   };
   reader.readAsText(file);
 }
 
-// ── Preset scenarios ──────────────────────────────────────────
-const SCENARIOS = [
-  {
-    symptoms: "65-year-old male. Sudden crushing chest pain radiating to left arm and jaw. Diaphoretic, pale. BP 82/50, HR 125, SpO2 91%. Onset 25 minutes ago.",
-    history: "Known hypertension, type 2 diabetes. On metformin, amlodipine. Smoker 30 pack-years. No prior cardiac history."
-  },
-  {
-    symptoms: "72-year-old female. Sudden right-sided facial droop, slurred speech, right arm weakness. FAST positive. Symptom onset approximately 40 minutes ago.",
-    history: "Atrial fibrillation on warfarin. INR 2.4 two weeks ago. Hypertension, on lisinopril."
-  },
-  {
-    symptoms: "28-year-old male. Motorcycle accident. Deep thigh laceration with arterial bleeding. GCS 13. BP 78/48, HR 136. Pale and confused.",
-    history: "No known medical history. No medical alert bracelet."
-  },
-  {
-    symptoms: "19-year-old female. Peanut exposure 5 minutes ago. Diffuse urticaria, throat tightness, audible stridor. BP 72/38, HR 145. Has known peanut allergy.",
-    history: "Peanut allergy diagnosed age 8. Carries EpiPen — not yet administered."
-  },
-  {
-    symptoms: "60-year-old male. Fever 39.9°C, HR 128, RR 26, BP 82/52, SpO2 90% on room air. Confused, mottled extremities. Indwelling urinary catheter.",
-    history: "Type 2 diabetes, CKD stage 3. On insulin and lisinopril. Post-prostate surgery 3 weeks ago."
-  },
-  {
-    symptoms: "22-year-old type 1 diabetic. Nausea, vomiting, abdominal pain, fruity breath. RR 28 (Kussmaul breathing). Blood glucose 490 mg/dL. Altered mentation.",
-    history: "Type 1 diabetes since age 9. On insulin pump. Pump site infection noted. No other conditions."
-  }
-];
+// ----------------------------------------------------------------
+// CHAT
+// ----------------------------------------------------------------
+let metricsHistory = [], totalTokensAll = 0, latenciesAll = [], confidencesAll = [];
 
-function load(i) {
-  document.getElementById("symptoms").value = SCENARIOS[i].symptoms;
-  document.getElementById("history").value  = SCENARIOS[i].history;
+function useChip(el) {
+  document.getElementById('chatInput').value = el.textContent;
+  sendMessage();
+}
+function handleKey(e) { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); } }
+function autoResize(el) { el.style.height = 'auto'; el.style.height = Math.min(el.scrollHeight, 120) + 'px'; }
+
+function appendMsg(role, text, meta) {
+  const welcome = document.getElementById('chatWelcome');
+  if (welcome) welcome.remove();
+  const msgs = document.getElementById('chatMessages');
+  const wrap = document.createElement('div');
+  wrap.className = `msg-wrap ${role}`;
+  const bubble = document.createElement('div');
+  bubble.className = 'msg-bubble';
+  if (role === 'bot') {
+    bubble.innerHTML = marked.parse(text);
+  } else {
+    bubble.textContent = text;
+  }
+  wrap.appendChild(bubble);
+  if (meta) {
+    const metaDiv = document.createElement('div');
+    metaDiv.className = 'msg-meta';
+    let html = `<span>${new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</span>`;
+    if (meta.latency_ms)  html += `<span class="latency-badge">⚡ ${meta.latency_ms}ms</span>`;
+    if (meta.chunks_used) html += `<span class="chunks-badge">📄 ${meta.chunks_used} chunks</span>`;
+    metaDiv.innerHTML = html;
+    wrap.appendChild(metaDiv);
+  }
+  msgs.appendChild(wrap);
+  msgs.scrollTop = msgs.scrollHeight;
 }
 
-async function runTriage() {
-  const symptoms = document.getElementById("symptoms").value.trim();
-  const history  = document.getElementById("history").value.trim();
+function showTyping() {
+  const msgs = document.getElementById('chatMessages');
+  const wrap = document.createElement('div');
+  wrap.className = 'msg-wrap bot'; wrap.id = 'typingIndicator';
+  wrap.innerHTML = `<div class="typing-bubble"><div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div></div>`;
+  msgs.appendChild(wrap); msgs.scrollTop = msgs.scrollHeight;
+}
+function removeTyping() { const t = document.getElementById('typingIndicator'); if(t) t.remove(); }
 
-  if (!symptoms) { alert("Please enter patient symptoms."); return; }
-
-  const btn = document.getElementById("runBtn");
-  btn.disabled = true;
-  btn.textContent = "Analyzing Patient Data...";
-
-  document.getElementById("resultArea").innerHTML = `
-    <div class="loading">
-      <div class="dot"></div><div class="dot"></div><div class="dot"></div>
-      Processing Triage via AI & Medical Protocols...
-    </div>`;
-
+async function sendMessage() {
+  const input = document.getElementById('chatInput');
+  const query = input.value.trim();
+  if (!query) return;
+  const sendBtn = document.getElementById('sendBtn');
+  sendBtn.disabled = true;
+  input.value = ''; input.style.height = 'auto';
+  appendMsg('user', query);
+  showTyping();
   try {
-    const res  = await fetch("/triage", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ symptoms, history })
-    });
+    const res  = await fetch('/api/qa', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ query }) });
     const data = await res.json();
-
-    if (data.error) throw new Error(data.error);
-
-    renderResult(data);
+    removeTyping();
+    if (data.error) { appendMsg('bot', '⚠️ ' + data.error); }
+    else { appendMsg('bot', data.answer, { latency_ms: data.latency_ms, chunks_used: data.chunks_used }); updateMetrics(query, data); }
   } catch (err) {
-    document.getElementById("resultArea").innerHTML =
-      `<div style="color:var(--red);font-family:var(--mono);font-size:0.9rem;font-weight:600;padding:20px;">
-        ⚠️ Error: ${err.message}
-       </div>`;
+    removeTyping(); appendMsg('bot', '⚠️ Network error: ' + err.message);
   }
-
-  btn.disabled = false;
-  btn.textContent = "⚡ Run Triage Analysis";
+  sendBtn.disabled = false; input.focus();
 }
 
-function renderResult(d) {
-  const pClass = d.priority.toLowerCase();
-  const dot    = { critical: "🚨", moderate: "⚠️", low: "ℹ️" }[pClass] || "";
-
-  // Update Analytics Tab Stats dynamically
-  document.getElementById("stat-latency").textContent = d.latency_ms + "ms";
-  document.getElementById("stat-confidence").textContent = d.confidence + "%";
-  document.getElementById("stat-priority").textContent = d.priority;
-
-  const actionsHTML = (d.actions || [])
-    .map(a => `<li>${a}</li>`).join("");
-
-  const ragHTML = (d.retrieved_protocols || []).map(p => `
-    <div class="rag-item">
-      <span>${p.category.toUpperCase()}</span>
-      <span class="rag-score">relevance: ${(p.score * 100).toFixed(0)}%</span>
-    </div>`).join("");
-
-  const cColor = d.confidence >= 75 ? "var(--green)"
-               : d.confidence >= 50 ? "var(--yellow)"
-               : "var(--red)";
-
-  document.getElementById("resultArea").innerHTML = `
-    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:8px;">
-      <span class="priority ${pClass}">${dot} ${d.priority}</span>
-      <div style="display:flex;gap:16px;align-items:center;background:#fafafa;padding:6px 12px;border:1px solid #e2e8f0;border-radius:6px;">
-        <span style="font-family:var(--mono);font-size:0.75rem;color:var(--muted);font-weight:700;">
-          CONFIDENCE: <span style="color:${cColor};font-size:0.9rem;">${d.confidence}%</span>
-        </span>
-        <span style="font-family:var(--mono);font-size:0.75rem;color:var(--muted);font-weight:700;">
-          LATENCY: <span style="color:var(--accent);">${d.latency_ms}ms</span>
-        </span>
-      </div>
-    </div>
-
-    <div class="field">
-      <div class="field-label">Probable Diagnosis</div>
-      <div class="field-value" style="font-size:1.1rem;color:var(--accent);font-weight:800;">${d.diagnosis}</div>
-    </div>
-
-    <div class="field">
-      <div class="field-label">Immediate Recommended Actions</div>
-      <ul class="action-list">${actionsHTML}</ul>
-    </div>
-
-    <div class="field" style="margin-top:6px;">
-      <div class="field-label">Clinical Rationale</div>
-      <div class="field-value" style="font-family:var(--mono);font-size:0.9rem;color:#4a5568;background:#fff5f8;padding:14px;border-radius:8px;border-left:4px solid var(--accent);">
-        ${d.rationale}
-      </div>
-    </div>
-
-    <div class="rag-panel">
-      <div class="rag-title">KNOWLEDGE BASE MATCHES (TOP 3)</div>
-      ${ragHTML}
-    </div>`;
+// ----------------------------------------------------------------
+// METRICS
+// ----------------------------------------------------------------
+function updateMetrics(query, data) {
+  latenciesAll.push(data.latency_ms);
+  confidencesAll.push(data.confidence);
+  totalTokensAll += data.total_tokens || 0;
+  metricsHistory.push({ query, ...data });
+  const avg = arr => arr.length ? Math.round(arr.reduce((s,v) => s+v, 0) / arr.length) : '--';
+  document.getElementById('mAvgLatency').textContent  = avg(latenciesAll);
+  document.getElementById('mLastLatency').textContent = data.latency_ms || '--';
+  document.getElementById('mTPS').textContent         = data.tokens_per_sec || '--';
+  document.getElementById('mTokens').textContent      = totalTokensAll;
+  document.getElementById('mConfidence').textContent  = avg(confidencesAll);
+  document.getElementById('mQueries').textContent     = metricsHistory.length;
+  const tbody = document.getElementById('metricsTableBody');
+  tbody.innerHTML = '';
+  metricsHistory.slice().reverse().forEach((row, i) => {
+    const n = metricsHistory.length - i;
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td style="color:var(--text-light);font-weight:700;">${n}</td>
+      <td style="max-width:250px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${row.query.length>58 ? row.query.slice(0,58)+'…' : row.query}</td>
+      <td><span class="latency-badge">⚡ ${row.latency_ms}ms</span></td>
+      <td>${row.total_tokens || '--'}</td>
+      <td><span class="chunks-badge">${row.confidence || '--'}%</span></td>`;
+    tbody.appendChild(tr);
+  });
 }
 </script>
 </body>
 </html>"""
 
-
 if __name__ == "__main__":
-    # Check for API key before starting
-    if not os.environ.get("OPENROUTER_API_KEY"):
-        print("\n⚠️  ERROR: OPENROUTER_API_KEY not set.")
-        print("   Run: $env:OPENROUTER_API_KEY='your_key_here'  (Windows PowerShell)")
-        print("   Or:  export OPENROUTER_API_KEY=your_key_here  (Mac/Linux)\n")
-        exit(1)
-
-    app.run(debug=True, port=5000)
+    app.run(debug=True, port=5000, use_reloader=False)

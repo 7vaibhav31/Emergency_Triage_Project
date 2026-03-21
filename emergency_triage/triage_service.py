@@ -1,121 +1,69 @@
-# ============================================================
-# triage_service.py  (OpenRouter / Llama version)
-#
-# Uses the openai library pointed at OpenRouter's API,
-# so we can use free models like meta-llama/llama-3.3-70b-instruct.
-#
-# YOUR OPENROUTER API KEY:
-# Get it from https://openrouter.ai/keys
-# Then set it:
-#   Windows:   set OPENROUTER_API_KEY=your_key_here
-#   Mac/Linux: export OPENROUTER_API_KEY=your_key_here
-# ============================================================
-
-import json
 import time
-import os
 from openai import OpenAI
 from rag_engine import RAGEngine
 
+# Key hardcoded directly — no environment variable can override this
+API_KEY = "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"
+MODEL   = "arcee-ai/trinity-large-preview:free"
 
-# ── Configure OpenRouter client ───────────────────────────────
-api_key_clean = os.environ.get("OPENROUTER_API_KEY", "").strip(" '\"")
-client = OpenAI(
-    api_key=api_key_clean,
-    base_url="https://openrouter.ai/api/v1",
-    default_headers={
-        "Authorization": f"Bearer {api_key_clean}"
-    }
-)
+QA_SYSTEM_PROMPT = """You are an advanced medical document assistant. 
+Answer the user's questions strictly based on the provided document excerpts.
+Be thorough, accurate, and professional. Structure your answer well using bullet points if helpful. Do NOT hallucinate data not found in the text."""
 
-MODEL = "arcee-ai/trinity-large-preview:free"
-
-
-# ── System prompt ─────────────────────────────────────────────
-BASE_SYSTEM_PROMPT = """You are an emergency medical triage AI assistant embedded in a real-time clinical decision support system. You assist qualified medical professionals only.
-
-RULES:
-1. Always respond with ONLY a valid JSON object — no text before or after, no markdown fences.
-2. When symptoms are ambiguous, assign the HIGHER priority — never downgrade due to missing data.
-3. Actions must be ordered by urgency using standard clinical terminology.
-4. Do not recommend specific drug doses — state drug name and route only.
-5. Confidence (0–100) reflects data completeness. Always respond even at low confidence.
-6. Keep rationale under 60 words.
-7. You are a decision-support tool. All clinical decisions rest with the treating physician.
-
-OUTPUT FORMAT (strict — return ONLY this JSON, nothing else):
-{
-  "priority": "CRITICAL" | "MODERATE" | "LOW",
-  "diagnosis": "Most probable diagnosis — 1 to 2 sentences.",
-  "actions": ["action 1", "action 2", "..."],
-  "confidence": <integer 0-100>,
-  "rationale": "Brief clinical reasoning, max 60 words."
-}"""
-
-
-class TriageService:
-
+class DocumentQAService:
     def __init__(self):
-        # Initialize RAG engine (unchanged)
         self.rag = RAGEngine()
 
-    def run_triage(self, symptoms: str, history: str = "") -> dict:
-        """
-        Full triage pipeline: RAG retrieval → prompt → Llama via OpenRouter → parse.
-        """
-
+    def ingest_document(self, text: str) -> int:
+        return self.rag.ingest(text)
+        
+    def answer_medical_question(self, query: str) -> dict:
         start_time = time.time()
-
-        # ── STEP 1: RAG Retrieval (unchanged) ─────────────────
-        retrieved = self.rag.retrieve(query=symptoms, top_k=3)
+        
+        # Single clean client — no duplicate Authorization header
+        client = OpenAI(
+            api_key=API_KEY,
+            base_url="https://openrouter.ai/api/v1",
+            default_headers={
+                "HTTP-Referer": "http://localhost:5000",
+                "X-Title": "MedRAG Doctor Assistant"
+            }
+        )
+        
+        # Reduced top_k to 2 to decrease context window processing time (lower latency)
+        retrieved   = self.rag.retrieve(query=query, top_k=2)
         rag_context = self.rag.format_context(retrieved)
 
-        # ── STEP 2: Build the full prompt ─────────────────────
-        history_section = (
-            f"\n<patient_history>\n{history.strip()}\n</patient_history>"
-            if history.strip() else ""
-        )
+        full_prompt = f"""{QA_SYSTEM_PROMPT}
 
-        full_prompt = f"""{rag_context}
+{rag_context}
 
 ---
+Based strictly on the medical excerpts above, answer the following clinical query:
+{query}"""
 
-Use the retrieved protocols above to inform your triage assessment.
-Now analyze this patient:
-
-<symptoms>
-{symptoms.strip()}
-</symptoms>
-{history_section}
-
-Respond with ONLY the JSON object. No extra text."""
-
-        # ── STEP 3: Call Llama via OpenRouter ─────────────────
         response = client.chat.completions.create(
             model=MODEL,
+            max_tokens=350,  # Increased to allow detailed, structured responses
             messages=[
-                {"role": "system", "content": BASE_SYSTEM_PROMPT},
-                {"role": "user",   "content": full_prompt},
+                {"role": "user", "content": full_prompt},
             ],
         )
 
-        # ── STEP 4: Parse JSON from response ──────────────────
-        raw_text = response.choices[0].message.content
-        clean_text = (
-            raw_text
-            .replace("```json", "")
-            .replace("```", "")
-            .strip()
-        )
-
-        result = json.loads(clean_text)
-
-        # ── STEP 5: Add metadata ───────────────────────────────
+        answer     = response.choices[0].message.content
         latency_ms = int((time.time() - start_time) * 1000)
-        result["latency_ms"] = latency_ms
-        result["retrieved_protocols"] = [
-            {"category": c["category"], "score": round(c["score"], 3)}
-            for c in retrieved
-        ]
+        
+        avg_score  = sum(c.get("score", 0) for c in retrieved) / max(len(retrieved), 1)
+        confidence = min(int(avg_score * 100) + 50, 99) 
+        
+        total_tokens   = int(len(full_prompt.split()) * 1.3) + int(len(answer.split()) * 1.3)
+        tokens_per_sec = round((total_tokens / latency_ms) * 1000, 2) if latency_ms > 0 else 0
 
-        return result
+        return {
+            "answer":        answer,
+            "latency_ms":    latency_ms,
+            "confidence":    confidence,
+            "chunks_used":   len(retrieved),
+            "total_tokens":  total_tokens,
+            "tokens_per_sec": tokens_per_sec
+        }

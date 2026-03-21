@@ -1,0 +1,132 @@
+====================================================================
+         CITY MEDICAL CENTRE — OUTPATIENT PRESCRIPTION
+====================================================================
+
+PRESCRIPTION ID  : CMC-2026-04821
+DATE             : 21 March 2026
+DOCTOR           : Dr. Ananya Mehta, MBBS, MD (Internal Medicine)
+LICENCE NO.      : MCI-DL-098234
+HOSPITAL         : City Medical Centre, Block 4, Sector 12, New Delhi
+
+--------------------------------------------------------------------
+PATIENT INFORMATION
+--------------------------------------------------------------------
+Name             : Rajesh Kumar Sharma
+Age / Gender     : 47 years / Male
+Weight           : 78 kg
+Blood Group      : B+
+Contact          : +91-98765-43210
+Address          : 24-B, Lotus Colony, Noida, UP - 201301
+
+--------------------------------------------------------------------
+CHIEF COMPLAINT / DIAGNOSIS
+--------------------------------------------------------------------
+Primary Diagnosis : Type 2 Diabetes Mellitus (uncontrolled)
+Secondary         : Hypertension (Stage 1), Mild Hyperlipidemia
+Complaints        : Patient reports persistent fatigue, increased
+                    thirst (polydipsia), frequent urination (polyuria),
+                    and occasional blurring of vision for the past
+                    3 weeks. Fasting blood glucose: 218 mg/dL.
+                    HbA1c: 9.1%. Blood pressure: 148/94 mmHg.
+                    Total cholesterol: 231 mg/dL. LDL: 152 mg/dL.
+
+--------------------------------------------------------------------
+PRESCRIBED MEDICATIONS
+--------------------------------------------------------------------
+
+Rx 1.
+  Medicine     : Metformin Hydrochloride 500 mg tablets
+  Dosage       : 1 tablet twice daily (morning and evening)
+  Route        : Oral, with meals
+  Duration     : 90 days (3 months)
+  Instructions : Take with food to reduce gastrointestinal side
+                 effects. Do not crush or chew.
+
+Rx 2.
+  Medicine     : Glimepiride 2 mg tablets
+  Dosage       : 1 tablet once daily
+  Route        : Oral, 30 minutes before breakfast
+  Duration     : 90 days
+  Instructions : Monitor blood glucose regularly. Avoid skipping
+                 meals after taking this medicine to prevent
+                 hypoglycaemia.
+
+Rx 3.
+  Medicine     : Amlodipine 5 mg tablets
+  Dosage       : 1 tablet once daily
+  Route        : Oral, in the morning
+  Duration     : 90 days
+  Instructions : For blood pressure control. Do not stop abruptly
+                 without consulting the doctor.
+
+Rx 4.
+  Medicine     : Rosuvastatin 10 mg tablets
+  Dosage       : 1 tablet once daily at bedtime
+  Route        : Oral
+  Duration     : 90 days
+  Instructions : For cholesterol management. Avoid grapefruit juice.
+                 Report any unexpected muscle pain or weakness
+                 immediately.
+
+Rx 5.
+  Medicine     : Vitamin D3 60,000 IU capsules (Cholecalciferol)
+  Dosage       : 1 capsule once a week
+  Route        : Oral
+  Duration     : 8 weeks
+  Instructions : Take after a meal. Vitamin D levels to be rechecked
+                 after 8 weeks.
+
+--------------------------------------------------------------------
+DRUG INTERACTIONS & WARNINGS
+--------------------------------------------------------------------
+- Metformin + Glimepiride: Combined use may increase risk of
+  hypoglycaemia. Patient to monitor blood glucose before meals.
+- Amlodipine + Grapefruit: Avoid grapefruit or grapefruit juice as
+  it may alter drug absorption.
+- Rosuvastatin: Avoid alcohol and high-fat meals for best effect.
+- Patient is NOT allergic to any of the prescribed medications
+  (confirmed by patient history).
+- Contraindication: Metformin to be held 48 hours before and after
+  any contrast-dye radiological procedure.
+
+--------------------------------------------------------------------
+LIFESTYLE & DIETARY ADVICE
+--------------------------------------------------------------------
+- Follow a low-carbohydrate, low-sodium, high-fibre diet.
+- Limit sugar, refined flour, fried foods, and red meat.
+- Exercise: Brisk walking 30 minutes, at least 5 days a week.
+- Limit alcohol to no more than 1 unit per day; avoid binge drinking.
+- Stop smoking immediately (patient is a light smoker).
+- Target fasting blood glucose: 80–130 mg/dL.
+- Target blood pressure: < 130/80 mmHg.
+- Self-monitor blood glucose at home — fasting every morning.
+
+--------------------------------------------------------------------
+FOLLOW-UP INSTRUCTIONS
+--------------------------------------------------------------------
+- Return for review in 4 weeks (21 April 2026).
+- Bring updated blood glucose diary and home BP readings.
+- Repeat labs before next visit:
+    • Fasting blood glucose & post-prandial glucose
+    • HbA1c
+    • Lipid profile (fasting)
+    • Renal function test (RFT) — Serum creatinine, eGFR
+    • Liver function test (LFT)
+
+--------------------------------------------------------------------
+REFERRALS
+--------------------------------------------------------------------
+- Ophthalmology: Referred for diabetic retinopathy screening.
+- Dietician: Referred for personalised diet counselling (appt: 28 March 2026).
+
+--------------------------------------------------------------------
+EMERGENCY CONTACT
+--------------------------------------------------------------------
+If blood glucose drops below 70 mg/dL (symptoms: sweating, trembling,
+confusion), consume 15g fast-acting sugar (3–4 glucose tablets or
+half a cup of juice). Seek emergency care if unconscious.
+Emergency helpline: +91-11-2345-6789
+
+====================================================================
+Signature: Dr. Ananya Mehta          Stamp: City Medical Centre
+====================================================================
