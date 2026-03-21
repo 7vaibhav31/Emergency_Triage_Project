@@ -3,8 +3,8 @@ from openai import OpenAI
 from rag_engine import RAGEngine
 
 # Key hardcoded directly — no environment variable can override this
-API_KEY = "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"
-MODEL   = "arcee-ai/trinity-large-preview:free"
+API_KEY = "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"
+MODEL   = "meta/llama-3.1-8b-instruct"
 
 QA_SYSTEM_PROMPT = """You are an advanced medical document assistant. 
 Answer the user's questions strictly based on the provided document excerpts.
@@ -23,11 +23,7 @@ class DocumentQAService:
         # Single clean client — no duplicate Authorization header
         client = OpenAI(
             api_key=API_KEY,
-            base_url="https://openrouter.ai/api/v1",
-            default_headers={
-                "HTTP-Referer": "http://localhost:5000",
-                "X-Title": "MedRAG Doctor Assistant"
-            }
+            base_url="https://integrate.api.nvidia.com/v1"
         )
         
         # Reduced top_k to 2 to decrease context window processing time (lower latency)
