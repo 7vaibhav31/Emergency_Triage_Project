@@ -99,8 +99,8 @@ HTML_PAGE = """<!DOCTYPE html>
     --mono: 'Courier New', monospace;
   }
 
-  body { background: var(--bg); color: var(--text); font-family: system-ui, sans-serif;
-         display: flex; min-height: 100vh; }
+  body { background: var(--bg); color: var(--text); font-family: 'Inter', system-ui, -apple-system, sans-serif;
+         display: flex; min-height: 100vh; font-weight: 500; }
 
   /* ── Sidebar ── */
   aside { width: 250px; background: var(--surface); border-right: 1px solid var(--border);
@@ -225,11 +225,12 @@ HTML_PAGE = """<!DOCTYPE html>
     <div class="logo">VB PROJECT</div>
   </div>
   <nav>
-    <a href="#" class="active">🏥 Triage Dashboard</a>
-    <a href="#">📋 Patient Records</a>
-    <a href="#">📈 Analytics</a>
-    <a href="#">⚕️ Resources</a>
-    <a href="#">⚙️ Settings</a>
+    <a href="#" id="tab-dashboard" class="active" onclick="switchTab('dashboard')">🏥 Triage Dashboard</a>
+    <a href="#" id="tab-upload" onclick="switchTab('upload')">📁 Patient Upload</a>
+    <a href="#" onclick="alert('Coming Soon!')">📋 Patient Records</a>
+    <a href="#" onclick="alert('Coming Soon!')">📈 Analytics</a>
+    <a href="#" onclick="alert('Coming Soon!')">⚕️ Resources</a>
+    <a href="#" onclick="alert('Coming Soon!')">⚙️ Settings</a>
   </nav>
 </aside>
 
@@ -237,7 +238,7 @@ HTML_PAGE = """<!DOCTYPE html>
 <div class="layout-wrapper">
   
   <header>
-    <div class="header-title">AI Powered Emergency Triage</div>
+    <div class="header-title">Aegis: Advanced Medical Intelligence</div>
     <div style="display:flex;gap:10px;">
       <span class="badge live">● LIVE SYSTEM</span>
       <span class="badge">RAG + ICP RULES</span>
@@ -245,8 +246,10 @@ HTML_PAGE = """<!DOCTYPE html>
   </header>
 
   <main>
-    <!-- LEFT: Input panel -->
-    <div class="card">
+    <!-- DASHBOARD SECTION -->
+    <div id="dashboard-section" style="display: contents;">
+      <!-- LEFT: Input panel -->
+      <div class="card">
       <div class="card-title">// PATIENT INTAKE</div>
 
       <div class="field">
@@ -285,6 +288,22 @@ HTML_PAGE = """<!DOCTYPE html>
         <div class="empty-state">Select a scenario or enter patient details to begin triage...</div>
       </div>
     </div>
+    </div>
+
+    <!-- UPLOAD SECTION -->
+    <div id="upload-section" style="display: none; grid-column: 1 / -1; width: 100%; max-width: 800px; margin: 0 auto; padding-top: 40px;">
+      <div class="card" style="text-align: center; padding: 60px; border: 2px dashed var(--accent); cursor: pointer;" onclick="document.getElementById('patientFile').click()">
+        <div class="card-title" style="font-size: 1.2rem; margin-bottom: 20px;">// UPLOAD PATIENT DOCUMENT</div>
+        <p style="color: var(--muted); margin-bottom: 30px; font-weight: 500; font-size: 1.05rem;">
+          Upload a patient's medical history, chief complaints, or text-based prescription files (.txt format). <br/>
+          The system will automatically parse the document and prepare the triage analysis.
+        </p>
+        <input type="file" id="patientFile" accept=".txt" style="display: none;" onchange="handleFileUpload(event)">
+        <button class="run-btn" style="width: auto; margin: 0 auto; padding: 15px 40px;" onclick="event.stopPropagation(); document.getElementById('patientFile').click()">
+          📄 Select .TXT File
+        </button>
+      </div>
+    </div>
   </main>
 
   <!-- FOOTER -->
@@ -295,6 +314,55 @@ HTML_PAGE = """<!DOCTYPE html>
 </div>
 
 <script>
+// ── Tab Switching & Upload Logic ───────────────────────────────
+function switchTab(tab) {
+  // Update sidebar active state
+  document.querySelectorAll('nav a').forEach(a => a.classList.remove('active'));
+  document.getElementById('tab-' + tab).classList.add('active');
+
+  // Toggle sections
+  if (tab === 'dashboard') {
+    document.getElementById('dashboard-section').style.display = 'contents';
+    document.getElementById('upload-section').style.display = 'none';
+  } else if (tab === 'upload') {
+    document.getElementById('dashboard-section').style.display = 'none';
+    document.getElementById('upload-section').style.display = 'block';
+  }
+}
+
+function handleFileUpload(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+
+  // Reset value so same file can be uploaded again if needed
+  event.target.value = '';
+
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    const text = e.target.result;
+    
+    // Switch to dashboard
+    switchTab('dashboard');
+    
+    // Populate symptoms textarea
+    const symptomsField = document.getElementById("symptoms");
+    symptomsField.value = "[[ DOCUMENT UPLOAD: " + file.name + " ]]\\n\\n" + text;
+    
+    // Visual feedback
+    symptomsField.style.transition = "all 0.3s";
+    symptomsField.style.borderColor = "var(--accent)";
+    symptomsField.style.boxShadow = "0 0 0 3px rgba(237,100,166,0.15)";
+    setTimeout(() => {
+      symptomsField.style.borderColor = "#e2e8f0";
+      symptomsField.style.boxShadow = "inset 0 2px 4px rgba(0,0,0,0.02)";
+      
+      // Auto-run the triage
+      runTriage();
+    }, 500);
+  };
+  reader.readAsText(file);
+}
+
 // ── Preset scenarios ──────────────────────────────────────────
 const SCENARIOS = [
   {

@@ -19,9 +19,13 @@ from rag_engine import RAGEngine
 
 
 # ── Configure OpenRouter client ───────────────────────────────
+api_key_clean = os.environ.get("OPENROUTER_API_KEY", "").strip(" '\"")
 client = OpenAI(
-    api_key=os.environ.get("OPENROUTER_API_KEY"),
+    api_key=api_key_clean,
     base_url="https://openrouter.ai/api/v1",
+    default_headers={
+        "Authorization": f"Bearer {api_key_clean}"
+    }
 )
 
 MODEL = "arcee-ai/trinity-large-preview:free"
