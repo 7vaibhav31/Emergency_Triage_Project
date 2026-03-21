@@ -8,12 +8,14 @@ This project is an AI-powered clinical decision support system designed to assis
 ## 🏗️ Architecture & Flow (Start to End)
 
 ### 1. The Frontend (User Interface)
-- **Branding & Layout:** Now titled **Aegis: Advanced Medical Intelligence**, the app features elevated, bold typography (Inter/system-ui) and an elegant light pink/skin tone design system. A dedicated **Sidebar** powers instant, no-reload navigation between different views like the **Triage Dashboard** and **Patient Upload** interface.
-- **Data Entry & Flow:** Users can provide patient clinical data via three methods:
+- **Visual Design & Typography:** Engineered with an elegant light pink/skin tone design system, the application leverages a premium, bold typography stack (`Inter` / system-ui with increased 600 weight) to ensure clinical readability and a highly professional aesthetic. The main header is proudly titled **Aegis: Advanced Medical Intelligence**. 
+- **Dynamic SPA Routing (Sidebar):** An interactive, Single-Page Application (SPA) sidebar provides instant, zero-reload navigation across the platform. It seamlessly switches between active modules (like the **Triage Dashboard** and **Patient Upload** interface) and elegantly handles placeholder modules (Patient Records, Analytics, Resources, Settings).
+- **Creator Profile / About Developer:** The interface integrates a dedicated profile card highlighting the primary architect: **Vaibhav Sharma, B.Tech Student - CSE AI/ML**. This module features integrated vector social links to GitHub and LinkedIn.
+- **Data Entry & Flow:** Medical professionals can provide patient clinical data via three intuitive methods:
   1. Manually typing into the Symptom/History text boxes.
-  2. Clicking predefined **Quick Scenarios** (e.g., STEMI, Stroke).
-  3. **Patient Document Upload:** Using a dedicated drag-and-drop UI to upload raw `.txt` medical notes or prescriptions. The browser's native `FileReader` API securely parses the text on the client side and auto-triggers the analysis.
-- **Execution:** Once symptoms are populated (via typing or file upload), the frontend triggers a POST request sending the JSON string of symptoms to the `/triage` endpoint on the Flask server.
+  2. Clicking predefined **Quick Scenarios** (e.g., STEMI, Stroke) for rapid testing.
+  3. **Patient Document Upload:** Dragging and dropping `.txt` medical notes directly into the UI. The browser seamlessly and securely parses the text on the client-side (`FileReader` API) and automatically triggers the triage analysis.
+- **Execution:** Once symptoms are populated (via typing or file upload), the frontend asynchronously triggers a POST request, sending the JSON payload to the `/triage` backend endpoint.
 
 ### 2. The Backend (Flask Application)
 - **What it is:** A Python Flask server `app.py` that listens for incoming requests. 
