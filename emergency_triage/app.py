@@ -339,9 +339,8 @@ HTML_PAGE = """<!DOCTYPE html>
       <div class="card" style="text-align: center; padding: 50px;">
         <img src="https://ui-avatars.com/api/?name=Vaibhav+Sharma&background=ed64a6&color=fff&size=100&bold=true" style="border-radius: 50%; margin: 0 auto 20px auto; width: 100px; height: 100px;">
         <h2 style="font-size: 2.2rem; color: var(--accent); margin-bottom: 10px;">Vaibhav Sharma</h2>
-        <p style="font-size: 1.15rem; color: var(--text); font-weight: 700; margin-bottom: 5px;">AI / ML Engineer</p>
+        <p style="font-size: 1.15rem; color: var(--text); font-weight: 700; margin-bottom: 5px;">B.Tech Student - CSE AI/ML</p>
         <p style="font-size: 1rem; color: var(--muted); margin-bottom: 30px; line-height: 1.6; font-weight: 500;">
-          <strong>Education:</strong> Bachelor's Degree<br/>
           Passionate about building intelligent AI-powered solutions like this robust clinical triage system.
         </p>
         <div style="display: flex; justify-content: center; gap: 30px;">
