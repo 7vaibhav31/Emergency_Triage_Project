@@ -230,7 +230,6 @@ HTML_PAGE = """<!DOCTYPE html>
     <a href="#" id="tab-records" onclick="switchTab('records')">📋 Patient Records</a>
     <a href="#" id="tab-analytics" onclick="switchTab('analytics')">📈 Analytics</a>
     <a href="#" id="tab-resources" onclick="switchTab('resources')">⚕️ Resources</a>
-    <a href="#" id="tab-settings" onclick="switchTab('settings')">⚙️ Settings</a>
     <a href="#" id="tab-developer" onclick="switchTab('developer')" style="margin-top: auto; border-top: 1px solid var(--border);">👨‍💻 About Developer</a>
   </nav>
 </aside>
@@ -315,31 +314,23 @@ HTML_PAGE = """<!DOCTYPE html>
     </div>
 
     <div id="analytics-section" style="display: none; grid-column: 1 / -1; width: 100%; max-width: 1000px; margin: 0 auto; padding-top: 20px;">
-      <h2 style="color: var(--accent); margin-bottom: 25px; font-size: 1.8rem; text-align: center;">📈 Triage Analytics Overview</h2>
+      <h2 style="color: var(--accent); margin-bottom: 25px; font-size: 1.8rem; text-align: center;">📈 Session Triage Analytics</h2>
+      <p style="text-align: center; color: var(--muted); margin-bottom: 30px; font-size: 1.1rem;">These metrics dynamically update based on your last system query.</p>
       <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 24px;">
         <div class="card" style="text-align: center; padding: 35px;">
-          <h3 style="color: var(--muted); font-size: 0.9rem; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 15px;">Total Analyses (30 Days)</h3>
-          <p style="font-size: 2.8rem; font-weight: 800; color: var(--text);">1,248</p>
-          <p style="color: var(--green); font-size: 0.9rem; font-weight: 700; margin-top: 8px;">+12.4% vs Last Month</p>
+          <h3 style="color: var(--muted); font-size: 0.9rem; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 15px;">Last Response Latency</h3>
+          <p id="stat-latency" style="font-size: 2.8rem; font-weight: 800; color: var(--text);">--</p>
+          <p style="color: var(--muted); font-size: 0.9rem; font-weight: 700; margin-top: 8px;">Network + Engine Time</p>
         </div>
         <div class="card" style="text-align: center; padding: 35px;">
-          <h3 style="color: var(--muted); font-size: 0.9rem; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 15px;">System Avg Latency</h3>
-          <p style="font-size: 2.8rem; font-weight: 800; color: var(--text);">1.8s</p>
-          <p style="color: var(--yellow); font-size: 0.9rem; font-weight: 700; margin-top: 8px;">Optimal Response Range</p>
+          <h3 style="color: var(--muted); font-size: 0.9rem; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 15px;">AI Core Confidence</h3>
+          <p id="stat-confidence" style="font-size: 2.8rem; font-weight: 800; color: var(--text);">--</p>
+          <p style="color: var(--muted); font-size: 0.9rem; font-weight: 700; margin-top: 8px;">Based on RAG match</p>
         </div>
         <div class="card" style="text-align: center; padding: 35px;">
-          <h3 style="color: var(--muted); font-size: 0.9rem; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 15px;">Critical P1 Priority Rate</h3>
-          <p style="font-size: 2.8rem; font-weight: 800; color: var(--red);">18%</p>
+          <h3 style="color: var(--muted); font-size: 0.9rem; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 15px;">Computed Priority</h3>
+          <p id="stat-priority" style="font-size: 2.5rem; font-weight: 800; color: var(--accent);">--</p>
           <p style="color: var(--muted); font-size: 0.9rem; font-weight: 700; margin-top: 8px;">Standard ED Flow</p>
-        </div>
-      </div>
-      
-      <div class="card" style="margin-top: 24px; padding: 40px;">
-        <h3 style="color: var(--text); font-size: 1.2rem; margin-bottom: 20px; text-align: center;">AI Confidence Score Distribution</h3>
-        <div style="width: 100%; background: #f1f5f9; border-radius: 12px; height: 35px; display: flex; overflow: hidden; box-shadow: inset 0 2px 4px rgba(0,0,0,0.05);">
-          <div style="width: 78%; background: var(--green); display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; font-size: 0.85rem; letter-spacing: 0.05em;">HIGH CONFIDENCE (>80%)</div>
-          <div style="width: 18%; background: var(--yellow); display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; font-size: 0.85rem;">MODERATE</div>
-          <div style="width: 4%; background: var(--red); display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; font-size: 0.85rem;">LOW</div>
         </div>
       </div>
     </div>
@@ -382,13 +373,6 @@ HTML_PAGE = """<!DOCTYPE html>
           <button class="sc-btn" style="color: var(--accent); border-color: var(--accent); padding: 10px 20px;" onclick="alert('Viewing Core Protocol: ATLS Major Trauma')">View Details</button>
         </div>
 
-      </div>
-    </div>
-
-    <div id="settings-section" style="display: none; grid-column: 1 / -1; width: 100%; max-width: 800px; margin: 0 auto; padding-top: 40px;">
-      <div class="card" style="text-align: center; padding: 60px;">
-        <h2 style="color: var(--accent); margin-bottom: 15px;">⚙️ Application Settings</h2>
-        <p style="color: var(--muted); font-size: 1.1rem;">No global settings defined right now. System pulls from local environment variables.</p>
       </div>
     </div>
 
@@ -448,7 +432,7 @@ function switchTab(tab) {
   document.getElementById('tab-' + tab).classList.add('active');
 
   // Toggle all sections
-  const tabs = ['dashboard', 'upload', 'records', 'analytics', 'resources', 'settings', 'developer'];
+  const tabs = ['dashboard', 'upload', 'records', 'analytics', 'resources', 'developer'];
   tabs.forEach(t => {
     let el = document.getElementById(t + '-section');
     if(el) {
@@ -568,6 +552,11 @@ async function runTriage() {
 function renderResult(d) {
   const pClass = d.priority.toLowerCase();
   const dot    = { critical: "🚨", moderate: "⚠️", low: "ℹ️" }[pClass] || "";
+
+  // Update Analytics Tab Stats dynamically
+  document.getElementById("stat-latency").textContent = d.latency_ms + "ms";
+  document.getElementById("stat-confidence").textContent = d.confidence + "%";
+  document.getElementById("stat-priority").textContent = d.priority;
 
   const actionsHTML = (d.actions || [])
     .map(a => `<li>${a}</li>`).join("");
