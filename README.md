@@ -1,4 +1,5 @@
 # MedRAG - AI-Powered Doctor Assistant
+Deployed Link : https://emergency-triage-project.vercel.app/#
 
 ## Project Overview
 This project is an advanced Medical Retrieval-Augmented Generation (RAG) system designed to act as an intelligent assistant for doctors. Built with a Flask backend and a modern vanilla HTML/CSS/JS frontend, the application allows medical professionals to upload clinical documents (like patient histories or prescriptions) and query an AI to get instant, highly accurate answers grounded strictly in the provided document, preventing AI hallucinations.
