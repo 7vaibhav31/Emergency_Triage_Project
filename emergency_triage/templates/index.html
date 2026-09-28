@@ -255,6 +255,38 @@
     border: 1px dashed var(--border);
   }
 
+  .sidebar-api-card {
+    background: linear-gradient(135deg, rgba(255,107,157,0.04) 0%, rgba(255,204,68,0.08) 100%);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 10px;
+    margin-bottom: 8px;
+  }
+  .free-badge {
+    background: linear-gradient(135deg, var(--pink), #ff9a44);
+    color: white;
+    font-size: 0.62rem;
+    font-weight: 700;
+    padding: 2px 7px;
+    border-radius: 20px;
+    text-decoration: none;
+    transition: transform 0.2s;
+  }
+  .free-badge:hover { transform: scale(1.05); }
+  .api-key-input {
+    width: 100%;
+    padding: 7px 9px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-size: 0.72rem;
+    font-family: inherit;
+    outline: none;
+    background: white;
+    transition: border-color 0.2s;
+  }
+  .api-key-input:focus { border-color: var(--pink); box-shadow: 0 0 0 2px rgba(255,107,157,0.15); }
+  .api-key-hint { font-size: 0.64rem; color: var(--text-light); margin-top: 4px; text-align: right; }
+
   /* MAIN PANEL */
   .main-panel { flex:1; display:flex; flex-direction:column; overflow:hidden; }
   .top-bar { background:white; border-bottom:1.5px solid var(--border); padding:14px 26px; display:flex; align-items:center; justify-content:space-between; flex-shrink:0; }
@@ -486,6 +518,16 @@
       <div class="nav-icon">📊</div>Metrics Analysis
     </button>
 
+    <div class="sidebar-section-title">AI Provider (Google Gemini)</div>
+    <div class="sidebar-api-card">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+        <span style="font-size:0.73rem;font-weight:700;color:var(--text-dark);">⚡ Gemini Key</span>
+        <a href="https://aistudio.google.com/app/apikey" target="_blank" class="free-badge">Free Key ↗</a>
+      </div>
+      <input type="password" id="geminiApiKeyInput" class="api-key-input" placeholder="Paste Gemini key (free)" oninput="saveApiKey(this.value)">
+      <div class="api-key-hint" id="apiKeyStatusHint">Saved in browser</div>
+    </div>
+
     <div class="sidebar-section-title" style="margin-top:auto;">System</div>
     <button class="nav-link" onclick="goToPage('page-about')">
       <div class="nav-icon">👤</div>Meet the Creator
@@ -596,7 +638,7 @@
     <div class="tech-pills">
       <div class="tech-pill">🐍 Python + Flask</div>
       <div class="tech-pill">🧠 RAG Pipeline</div>
-      <div class="tech-pill">🤖 NVIDIA NIM API</div>
+      <div class="tech-pill">🤖 Google Gemini (Free Tier)</div>
       <div class="tech-pill">📄 TF-IDF Retrieval</div>
       <div class="tech-pill">💅 Vanilla CSS</div>
       <div class="tech-pill">⚡ Low Latency Design</div>

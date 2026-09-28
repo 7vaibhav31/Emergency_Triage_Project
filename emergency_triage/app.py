@@ -155,11 +155,12 @@ def qa_document():
     """Answers a medical query grounded across all indexed documents."""
     data = request.get_json(silent=True) or {}
     query = data.get("query", "").strip()
+    api_key = data.get("api_key") or request.headers.get("X-Api-Key")
 
     if not query:
         return jsonify({"error": "No question provided."}), 400
 
-    result = qa_service.answer_medical_question(query)
+    result = qa_service.answer_medical_question(query, api_key=api_key)
     return jsonify(result)
 
 
