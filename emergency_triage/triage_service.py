@@ -44,8 +44,8 @@ def resolve_ai_client(api_key: str = None):
                 api_key=key,
                 base_url="https://generativelanguage.googleapis.com/v1beta/openai/"
             ),
-            os.getenv("GEMINI_MODEL", "gemini-1.5-flash"),
-            "Google Gemini 1.5 Flash (Free Tier)"
+            os.getenv("GEMINI_MODEL", "gemini-3.8-flash"),
+            "Google Gemini 3.8 Flash (Free Tier)"
         )
 
     # 2. Check for NVIDIA NIM key
@@ -66,8 +66,8 @@ def resolve_ai_client(api_key: str = None):
             api_key=key or "",
             base_url="https://generativelanguage.googleapis.com/v1beta/openai/"
         ),
-        "gemini-1.5-flash",
-        "Google Gemini 1.5 Flash"
+        "gemini-3.8-flash",
+        "Google Gemini 3.8 Flash"
     )
 
 
@@ -117,6 +117,24 @@ class DocumentQAService:
             }
 
         client, model_name, provider_name = resolve_ai_client(api_key)
+
+        # Guardrail: No API key configured at all
+        if not (api_key or os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY") or os.getenv("NVIDIA_API_KEY")):
+            return {
+                "answer": (
+                    "⚠️ **No API Key Configured**\n\n"
+                    "To get AI-powered answers:\n"
+                    "1. Get a free key from **[Google AI Studio](https://aistudio.google.com/app/apikey)**\n"
+                    "2. Either paste it in the sidebar **Gemini Key** box, or set `GEMINI_API_KEY` in Vercel Environment Variables\n"
+                    "3. Ask your question again!"
+                ),
+                "latency_ms": 5,
+                "confidence": 100,
+                "chunks_used": 0,
+                "total_tokens": 20,
+                "tokens_per_sec": 100.0,
+                "citations": []
+            }
 
         retrieved = self.rag.retrieve(query=query, top_k=3)
         rag_context = self.rag.format_context(retrieved)
