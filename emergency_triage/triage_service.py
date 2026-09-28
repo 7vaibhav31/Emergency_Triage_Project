@@ -1,8 +1,8 @@
 """
 triage_service.py
 =================
-MedRAG inference and retrieval coordinator for Vercel deployment.
-Connects the lightweight RAG engine with NVIDIA NIM OpenAI-compatible API.
+MedRAG multi-document inference and retrieval coordinator for Vercel deployment.
+Connects the lightweight multi-document RAG engine with NVIDIA NIM API.
 """
 
 import os
@@ -20,10 +20,11 @@ Your job is to explain and summarize information strictly based on the provided 
 IMPORTANT RULES:
 1. Ground every statement strictly in the provided excerpts.
 2. If an excerpt mentions a value (e.g. hemoglobin, dosage, blood pressure), report it accurately.
-3. If information is NOT mentioned in the excerpts, clearly state that it is not available in the document.
-4. Do NOT diagnose diseases, prescribe medication, or give definitive medical advice.
-5. Always advise the patient to consult their licensed doctor for clinical decisions.
-6. Present your answer cleanly with bullet points if helpful."""
+3. If information is NOT mentioned in the excerpts, clearly state that it is not available in the documents.
+4. If multiple documents are provided (e.g. prescription and lab report), synthesize the findings across them and cite the specific source document.
+5. Do NOT diagnose diseases, prescribe medication, or give definitive medical advice.
+6. Always advise the patient to consult their licensed doctor for clinical decisions.
+7. Present your answer cleanly with bullet points if helpful."""
 
 
 class DocumentQAService:
@@ -33,19 +34,41 @@ class DocumentQAService:
     def ingest_document(self, text: str, filename: str = "document.txt", category: str = "General Medical Document") -> int:
         return self.rag.ingest(text, filename=filename, category=category)
 
+    def get_documents(self) -> list:
+        return self.rag.documents
+
+    def clear_documents(self):
+        self.rag.clear()
+
+    def remove_document(self, filename: str):
+        self.rag.remove_document(filename)
+
     def answer_medical_question(self, query: str) -> dict:
         start_time = time.time()
 
-        # Handle vague or short inputs
-        q_clean = query.strip()
-        if len(q_clean) < 3 or q_clean.lower() in ["hi", "hello", "hey", "help"]:
+        # Check if any documents have been uploaded
+        if not self.rag.chunks:
             return {
-                "answer": "Hello! I am MedRAG, your clinical document assistant. Please upload a medical document and ask any specific question about lab values, medications, dosages, or clinical notes.",
-                "latency_ms": 25,
-                "confidence": 95,
+                "answer": "📄 **No documents uploaded yet.**\n\nPlease use the **Upload Documents** area in the left sidebar to upload one or more medical files (.pdf or .txt, such as prescriptions or lab reports). Once uploaded, I'll be ready to answer your questions!",
+                "latency_ms": 12,
+                "confidence": 100,
                 "chunks_used": 0,
                 "total_tokens": 30,
                 "tokens_per_sec": 120.0,
+                "citations": []
+            }
+
+        # Handle vague or short greetings
+        q_clean = query.strip()
+        if len(q_clean) < 3 or q_clean.lower() in ["hi", "hello", "hey", "help"]:
+            doc_names = ", ".join([d["filename"] for d in self.rag.documents])
+            return {
+                "answer": f"Hello! I am MedRAG, your medical document assistant. I currently have **{len(self.rag.documents)} document(s)** indexed: *{doc_names}*.\n\nAsk me any question about medications, dosages, lab results, or clinical observations!",
+                "latency_ms": 20,
+                "confidence": 95,
+                "chunks_used": 0,
+                "total_tokens": 35,
+                "tokens_per_sec": 130.0,
                 "citations": []
             }
 
@@ -82,7 +105,6 @@ Based strictly on the medical excerpts above, answer the following clinical quer
             )
             answer = response.choices[0].message.content
         except Exception as e:
-            # Fallback to 8b model if 11b vision instruct is busy or errors
             try:
                 response = client.chat.completions.create(
                     model="meta/llama-3.1-8b-instruct",

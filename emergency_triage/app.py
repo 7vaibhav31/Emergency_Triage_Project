@@ -2,12 +2,12 @@
 app.py
 ======
 MedRAG 2.0 Web Application & API Entry Point for Vercel Serverless.
+Supports multi-document upload and simultaneous retrieval across documents.
 """
 
 import io
 import os
-import re
-from flask import Flask, request, jsonify, render_template, render_template_string
+from flask import Flask, request, jsonify, render_template
 from triage_service import DocumentQAService
 
 base_dir = os.path.dirname(os.path.abspath(__file__))
@@ -28,7 +28,7 @@ def detect_document_category(text: str) -> str:
         return "Discharge Summary"
     elif any(k in t for k in ["mri", "ct scan", "ultrasound", "x-ray", "echocardiogram"]):
         return "Medical Imaging / Diagnostic Report"
-    return "Clinical Medical Document"
+    return "Clinical Document"
 
 
 @app.route("/")
@@ -47,18 +47,19 @@ def index():
 @app.route("/api/upload", methods=["POST"])
 def upload_document():
     """
-    Ingests an uploaded medical document (.pdf or .txt) completely in memory.
+    Ingests one or more uploaded medical documents (.pdf or .txt) in memory.
     Safe for read-only serverless filesystems like Vercel.
     """
-    extracted_text = ""
-    filename = "document.txt"
+    uploaded_files = request.files.getlist("files") or request.files.getlist("file")
+    results = []
 
-    # Option A: Multi-part file upload
-    if "file" in request.files:
-        uploaded_file = request.files["file"]
-        if uploaded_file and uploaded_file.filename:
+    if uploaded_files and any(f.filename for f in uploaded_files):
+        for uploaded_file in uploaded_files:
+            if not uploaded_file or not uploaded_file.filename:
+                continue
             filename = uploaded_file.filename
             file_bytes = uploaded_file.read()
+            extracted_text = ""
 
             if filename.lower().endswith(".pdf"):
                 try:
@@ -71,36 +72,87 @@ def upload_document():
                             pages_text.append(f"--- Page {page_idx} ---\n{p_txt}")
                     extracted_text = "\n\n".join(pages_text)
                 except Exception as e:
-                    return jsonify({"error": f"Failed to extract PDF text: {str(e)}"}), 400
+                    return jsonify({"error": f"Failed to extract PDF '{filename}': {str(e)}"}), 400
             else:
                 try:
                     extracted_text = file_bytes.decode("utf-8")
                 except UnicodeDecodeError:
                     extracted_text = file_bytes.decode("latin-1", errors="ignore")
 
-    # Option B: JSON payload
-    if not extracted_text:
+            if extracted_text.strip():
+                category = detect_document_category(extracted_text)
+                count = qa_service.ingest_document(extracted_text, filename=filename, category=category)
+                results.append({
+                    "filename": filename,
+                    "category": category,
+                    "chunks": count
+                })
+
+    # Option B: Raw text payload fallback
+    if not results:
         data = request.get_json(silent=True) or {}
         extracted_text = data.get("text", "").strip()
-        filename = data.get("filename", filename)
+        filename = data.get("filename", "document.txt")
+        if extracted_text:
+            category = detect_document_category(extracted_text)
+            count = qa_service.ingest_document(extracted_text, filename=filename, category=category)
+            results.append({
+                "filename": filename,
+                "category": category,
+                "chunks": count
+            })
 
-    if not extracted_text.strip():
-        return jsonify({"error": "No readable text found in uploaded document."}), 400
+    if not results:
+        return jsonify({"error": "No valid text or documents found to upload."}), 400
 
-    category = detect_document_category(extracted_text)
-    chunks_count = qa_service.ingest_document(extracted_text, filename=filename, category=category)
+    total_chunks = len(qa_service.rag.chunks)
+    all_docs = qa_service.get_documents()
 
     return jsonify({
-        "message": f"Successfully indexed into {chunks_count} context fragments.",
-        "chunks": chunks_count,
-        "category": category,
-        "filename": filename
+        "message": f"Successfully indexed {len(results)} document(s) into {total_chunks} total context fragments.",
+        "uploaded": results,
+        "documents": all_docs,
+        "total_chunks": total_chunks
+    })
+
+
+@app.route("/api/documents", methods=["GET"])
+def get_documents():
+    """Returns currently indexed documents."""
+    return jsonify({
+        "documents": qa_service.get_documents(),
+        "total_chunks": len(qa_service.rag.chunks)
+    })
+
+
+@app.route("/api/documents/clear", methods=["POST"])
+def clear_documents():
+    """Clears all indexed documents from memory."""
+    qa_service.clear_documents()
+    return jsonify({
+        "message": "All indexed documents have been cleared.",
+        "documents": [],
+        "total_chunks": 0
+    })
+
+
+@app.route("/api/documents/remove", methods=["POST"])
+def remove_document():
+    """Removes a specific document by filename."""
+    data = request.get_json(silent=True) or {}
+    filename = data.get("filename")
+    if filename:
+        qa_service.remove_document(filename)
+    return jsonify({
+        "message": f"Document '{filename}' removed.",
+        "documents": qa_service.get_documents(),
+        "total_chunks": len(qa_service.rag.chunks)
     })
 
 
 @app.route("/api/qa", methods=["POST"])
 def qa_document():
-    """Answers a medical query grounded in the uploaded document."""
+    """Answers a medical query grounded across all indexed documents."""
     data = request.get_json(silent=True) or {}
     query = data.get("query", "").strip()
 

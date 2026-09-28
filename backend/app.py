@@ -36,50 +36,101 @@ def index():
 @app.route("/api/upload", methods=["POST"])
 def upload_document():
     """
-    Endpoint for uploading a medical document (.txt or .pdf).
-    Saves the file into documents/ folder, extracts text, detects category, and indexes into RAG.
+    Endpoint for uploading medical document(s) (.txt or .pdf).
+    Supports multiple files uploaded simultaneously.
     """
-    # Option A: File uploaded via standard form
-    if "file" in request.files:
-        uploaded_file = request.files["file"]
-        if uploaded_file.filename:
+    uploaded_files = request.files.getlist("files") or request.files.getlist("file")
+    results = []
+
+    if uploaded_files and any(f.filename for f in uploaded_files):
+        for uploaded_file in uploaded_files:
+            if not uploaded_file or not uploaded_file.filename:
+                continue
             save_path = os.path.join(documents_dir, uploaded_file.filename)
-            uploaded_file.save(save_path)
-            result = qa_service.ingest_file(save_path)
-            result["filename"] = uploaded_file.filename
-            return jsonify({
-                "message": f"Saved to documents/ and indexed into {result['chunks']} chunks.",
-                "chunks": result["chunks"],
-                "category": result["category"],
-                "filename": uploaded_file.filename
+            try:
+                uploaded_file.save(save_path)
+            except Exception:
+                pass
+            res = qa_service.ingest_file(save_path)
+            results.append({
+                "filename": uploaded_file.filename,
+                "category": res.get("category", "General"),
+                "chunks": res.get("chunks", 0)
             })
 
     # Option B: Raw text provided via JSON
-    data = request.get_json(silent=True) or {}
-    text = data.get("text", "").strip()
-    filename = data.get("filename", "document.txt")
+    if not results:
+        data = request.get_json(silent=True) or {}
+        text = data.get("text", "").strip()
+        filename = data.get("filename", "document.txt")
 
-    if not text:
-        return jsonify({"error": "No document provided. Please choose a valid file."}), 400
+        if text:
+            save_path = os.path.join(documents_dir, filename)
+            try:
+                with open(save_path, "w", encoding="utf-8") as f:
+                    f.write(text)
+            except Exception:
+                pass
+            res = qa_service.ingest_raw_text(text, filename=filename)
+            results.append({
+                "filename": filename,
+                "category": res.get("category", "General"),
+                "chunks": res.get("chunks", 0)
+            })
 
-    # Save raw text document into documents_dir
-    save_path = os.path.join(documents_dir, filename)
-    with open(save_path, "w", encoding="utf-8") as f:
-        f.write(text)
+    if not results:
+        return jsonify({"error": "No valid document(s) provided. Please choose a valid file."}), 400
 
-    result = qa_service.ingest_raw_text(text, filename=filename)
+    docs = getattr(qa_service.rag, "documents", [])
+    total_chunks = len(getattr(qa_service.rag, "chunks", [])) or sum(r["chunks"] for r in results)
+
     return jsonify({
-        "message": f"Saved to documents/ and indexed into {result['chunks']} chunks.",
-        "chunks": result["chunks"],
-        "category": result["category"],
-        "filename": result["filename"]
+        "message": f"Successfully indexed {len(results)} document(s).",
+        "uploaded": results,
+        "documents": [{"filename": r["filename"], "category": r["category"], "chunks": r["chunks"]} for r in results],
+        "total_chunks": total_chunks
+    })
+
+
+@app.route("/api/documents", methods=["GET"])
+def get_documents():
+    """Returns currently indexed documents."""
+    return jsonify({
+        "documents": getattr(qa_service.rag, "documents", []),
+        "total_chunks": len(getattr(qa_service.rag, "chunks", []))
+    })
+
+
+@app.route("/api/documents/clear", methods=["POST"])
+def clear_documents():
+    """Clears all indexed documents from memory."""
+    if hasattr(qa_service.rag, "clear"):
+        qa_service.rag.clear()
+    return jsonify({
+        "message": "All documents cleared.",
+        "documents": [],
+        "total_chunks": 0
+    })
+
+
+@app.route("/api/documents/remove", methods=["POST"])
+def remove_document():
+    """Removes a specific document by filename."""
+    data = request.get_json(silent=True) or {}
+    filename = data.get("filename")
+    if filename and hasattr(qa_service.rag, "remove_document"):
+        qa_service.rag.remove_document(filename)
+    return jsonify({
+        "message": f"Document '{filename}' removed.",
+        "documents": getattr(qa_service.rag, "documents", []),
+        "total_chunks": len(getattr(qa_service.rag, "chunks", []))
     })
 
 
 @app.route("/api/qa", methods=["POST"])
 def answer_question():
     """
-    Endpoint for asking questions about the active document.
+    Endpoint for asking questions about the active document(s).
     Executes the evidence-grounded LangGraph workflow.
     """
     data = request.get_json(silent=True) or {}
@@ -88,7 +139,7 @@ def answer_question():
     if not query:
         return jsonify({"error": "Please enter a clinical question."}), 400
 
-    # Ensure a document was uploaded first
+    # Ensure at least one document was uploaded first
     if not qa_service.rag.has_documents:
         return jsonify({"error": "Please upload a medical document first before asking questions."}), 400
 
