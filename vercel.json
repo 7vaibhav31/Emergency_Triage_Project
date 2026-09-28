@@ -1,0 +1,14 @@
+{
+  "builds": [
+    {
+      "src": "emergency_triage/app.py",
+      "use": "@vercel/python"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/(.*)",
+      "dest": "emergency_triage/app.py"
+    }
+  ]
+}

@@ -1,0 +1,6 @@
+flask
+openai
+scikit-learn
+numpy
+pypdf
+python-dotenv
