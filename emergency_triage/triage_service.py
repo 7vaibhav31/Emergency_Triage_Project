@@ -105,18 +105,23 @@ Based strictly on the medical excerpts above, answer the following clinical quer
             )
             answer = response.choices[0].message.content
         except Exception as e:
-            try:
-                response = client.chat.completions.create(
-                    model="meta/llama-3.1-8b-instruct",
-                    max_tokens=400,
-                    temperature=0.2,
-                    messages=[
-                        {"role": "user", "content": full_prompt},
-                    ],
+            err_str = str(e)
+            if "403" in err_str or "Authorization" in err_str or "quota" in err_str.lower():
+                answer = (
+                    "⚠️ **NVIDIA NIM API Key Notice (403 Forbidden):**\n\n"
+                    "The hardcoded fallback NVIDIA API key has exhausted its evaluation credits on NVIDIA NIM.\n\n"
+                    "**To fix this instantly:**\n"
+                    "1. Get a free API key at **[build.nvidia.com](https://build.nvidia.com)** (or Groq / OpenRouter).\n"
+                    "2. Add it to your **Vercel Project Settings → Environment Variables** as `NVIDIA_API_KEY`.\n"
+                    "3. Redeploy or restart to restore live clinical answers!"
                 )
-                answer = response.choices[0].message.content
-            except Exception as e2:
-                answer = f"Error communicating with AI service: {str(e2)}"
+            elif "410" in err_str or "end of life" in err_str.lower():
+                answer = (
+                    f"⚠️ **Model Deprecated Notice:** The requested model has reached end-of-life on NVIDIA NIM. "
+                    f"Please update `MODEL_NAME` to `meta/llama-3.2-11b-vision-instruct` or `mistralai/mistral-7b-instruct-v0.3`."
+                )
+            else:
+                answer = f"⚠️ AI Service Notice: {err_str}"
 
         latency_ms = max(1, int((time.time() - start_time) * 1000))
         avg_score = sum(c.get("score", 0) for c in retrieved) / max(len(retrieved), 1)
