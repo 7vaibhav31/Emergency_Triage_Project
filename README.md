@@ -1,5 +1,7 @@
 # 🩺 MedRAG 2.0 — Evidence-Grounded Medical Document Assistant
 
+https://emergency-triage-project.vercel.app/
+
 [![Live Demo](https://img.shields.io/badge/Live-Deployment-ff6b9d?style=for-the-badge&logo=vercel&logoColor=white)](https://emergency-triage-project.vercel.app/#)
 [![Python](https://img.shields.io/badge/Python-3.10%2B-blue?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
 [![LangGraph](https://img.shields.io/badge/Orchestration-LangGraph-orange?style=for-the-badge)](https://github.com/langchain-ai/langgraph)
