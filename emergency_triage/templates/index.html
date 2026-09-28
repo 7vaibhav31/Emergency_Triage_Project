@@ -581,13 +581,24 @@
     </button>
 
     <div class="sidebar-section-title">AI Provider (Google Gemini)</div>
-    <div class="sidebar-api-card">
+    <div class="sidebar-api-card" id="apiKeyCard">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
         <span style="font-size:0.73rem;font-weight:700;color:var(--text-dark);">⚡ Gemini Key</span>
-        <a href="https://aistudio.google.com/app/apikey" target="_blank" class="free-badge">Free Key ↗</a>
+        <a href="https://aistudio.google.com/app/apikey" target="_blank" class="free-badge" id="freeKeyBadge">Free Key ↗</a>
       </div>
-      <input type="password" id="geminiApiKeyInput" class="api-key-input" placeholder="Paste Gemini key (free)" oninput="saveApiKey(this.value)">
-      <div class="api-key-hint" id="apiKeyStatusHint">Optional if set in Vercel env vars</div>
+      <!-- Server key status (shown when GEMINI_API_KEY is set in Vercel) -->
+      <div id="serverKeyStatus" style="display:none; padding:8px 10px; background:linear-gradient(135deg,#e8fbf0,#f0fff8); border:1.5px solid #bbf7d0; border-radius:10px; font-size:0.74rem; font-weight:700; color:#15803d; text-align:center;">
+        ✅ Server key active<br>
+        <span style="font-weight:500;font-size:0.68rem;color:#166534;">GEMINI_API_KEY set in Vercel</span>
+        <div style="margin-top:6px;">
+          <button onclick="toggleManualKey()" style="background:none;border:1px solid #bbf7d0;color:#15803d;font-size:0.68rem;font-weight:600;padding:2px 8px;border-radius:6px;cursor:pointer;font-family:inherit;">Override with own key</button>
+        </div>
+      </div>
+      <!-- Manual key input (shown when no server key) -->
+      <div id="manualKeySection">
+        <input type="password" id="geminiApiKeyInput" class="api-key-input" placeholder="Paste Gemini key (optional)" oninput="saveApiKey(this.value)">
+        <div class="api-key-hint" id="apiKeyStatusHint">Optional if set in Vercel env vars</div>
+      </div>
     </div>
 
     <div class="sidebar-section-title" style="margin-top:auto;">System</div>
@@ -996,20 +1007,53 @@ function dismissToast(toast) {
 // ----------------------------------------------------------------
 function saveApiKey(val) {
   localStorage.setItem('gemini_api_key', val);
-  document.getElementById('apiKeyStatusHint').textContent = val ? '✅ Key saved in browser' : 'Saved in browser';
+  document.getElementById('apiKeyStatusHint').textContent = val ? '✅ Key saved in browser' : 'Optional if set in Vercel env vars';
 }
 function getApiKey() {
   return document.getElementById('geminiApiKeyInput')?.value?.trim()
     || localStorage.getItem('gemini_api_key')
     || '';
 }
-window.addEventListener('DOMContentLoaded', () => {
-  const saved = localStorage.getItem('gemini_api_key');
-  if (saved) {
-    const inp = document.getElementById('geminiApiKeyInput');
-    if (inp) { inp.value = saved; }
-    document.getElementById('apiKeyStatusHint').textContent = '✅ Key saved in browser';
+
+let serverHasKey = false;
+let manualKeyVisible = false;
+
+function toggleManualKey() {
+  manualKeyVisible = !manualKeyVisible;
+  document.getElementById('manualKeySection').style.display = manualKeyVisible ? 'block' : 'none';
+}
+
+async function checkServerConfig() {
+  try {
+    const res = await fetch('/api/config');
+    const data = await res.json();
+    serverHasKey = data.has_server_key || false;
+    if (serverHasKey) {
+      // Server has key — show green badge, hide manual input
+      document.getElementById('serverKeyStatus').style.display = 'block';
+      document.getElementById('manualKeySection').style.display = 'none';
+      document.getElementById('freeKeyBadge').style.display = 'none';
+    } else {
+      // No server key — show manual input
+      document.getElementById('serverKeyStatus').style.display = 'none';
+      document.getElementById('manualKeySection').style.display = 'block';
+      document.getElementById('freeKeyBadge').style.display = '';
+      // Restore saved local key
+      const saved = localStorage.getItem('gemini_api_key');
+      if (saved) {
+        const inp = document.getElementById('geminiApiKeyInput');
+        if (inp) inp.value = saved;
+        document.getElementById('apiKeyStatusHint').textContent = '✅ Key saved in browser';
+      }
+    }
+  } catch (e) {
+    // Fallback: show manual input
+    document.getElementById('manualKeySection').style.display = 'block';
   }
+}
+
+window.addEventListener('DOMContentLoaded', () => {
+  checkServerConfig();
 });
 
 async function sendMessage() {

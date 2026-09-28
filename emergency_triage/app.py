@@ -116,6 +116,26 @@ def upload_document():
     })
 
 
+@app.route("/api/config", methods=["GET"])
+def get_config():
+    """Returns server-side configuration status (safe, no secrets exposed)."""
+    import os
+    has_key = bool(
+        os.getenv("GEMINI_API_KEY") or
+        os.getenv("GOOGLE_API_KEY") or
+        os.getenv("NVIDIA_API_KEY")
+    )
+    provider = "none"
+    if os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY"):
+        provider = "gemini"
+    elif os.getenv("NVIDIA_API_KEY"):
+        provider = "nvidia"
+    return jsonify({
+        "has_server_key": has_key,
+        "provider": provider
+    })
+
+
 @app.route("/api/documents", methods=["GET"])
 def get_documents():
     """Returns currently indexed documents."""
