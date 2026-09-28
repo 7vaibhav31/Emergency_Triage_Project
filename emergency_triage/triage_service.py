@@ -26,11 +26,19 @@ IMPORTANT RULES:
 def resolve_ai_client(api_key: str = None):
     """
     Returns (client, model_name, provider_name).
-    Configured for Google Gemini Free Tier with fallback support for NVIDIA NIM.
+    Supports Google Gemini Free Tier keys (both AIza... and AQ... formats).
     """
-    # 1. Check for Gemini Key (passed from UI or environment)
+    # 1. Check for Gemini Key (passed from UI or Vercel environment variable)
     key = api_key or os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
-    if key and (key.startswith("AIza") or not key.startswith("nvapi-")):
+
+    # Gemini keys: new format starts with "AQ.", classic format starts with "AIza"
+    is_gemini_key = key and (
+        key.startswith("AIza") or
+        key.startswith("AQ.") or
+        (not key.startswith("nvapi-") and len(key) > 10)
+    )
+
+    if is_gemini_key:
         return (
             OpenAI(
                 api_key=key,
@@ -52,7 +60,7 @@ def resolve_ai_client(api_key: str = None):
             "NVIDIA NIM"
         )
 
-    # 3. Default to Google Gemini endpoint
+    # 3. Default: try Gemini endpoint with whatever key we have
     return (
         OpenAI(
             api_key=key or "",
