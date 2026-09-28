@@ -1,0 +1,13 @@
+flask
+pypdf
+openai
+langchain
+langchain-core
+langchain-community
+langchain-openai
+langchain-huggingface
+langchain-text-splitters
+langgraph
+sentence-transformers
+faiss-cpu
+python-dotenv

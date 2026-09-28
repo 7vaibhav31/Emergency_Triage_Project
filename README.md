@@ -1,58 +1,170 @@
-# MedRAG - AI-Powered Doctor Assistant
-Deployed Link : https://emergency-triage-project.vercel.app/#
+# 🩺 MedRAG 2.0 — Evidence-Grounded Medical Document Assistant
 
-## Project Overview
-This project is an advanced Medical Retrieval-Augmented Generation (RAG) system designed to act as an intelligent assistant for doctors. Built with a Flask backend and a modern vanilla HTML/CSS/JS frontend, the application allows medical professionals to upload clinical documents (like patient histories or prescriptions) and query an AI to get instant, highly accurate answers grounded strictly in the provided document, preventing AI hallucinations.
+[![Live Demo](https://img.shields.io/badge/Live-Deployment-ff6b9d?style=for-the-badge&logo=vercel&logoColor=white)](https://emergency-triage-project.vercel.app/#)
+[![Python](https://img.shields.io/badge/Python-3.10%2B-blue?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
+[![LangGraph](https://img.shields.io/badge/Orchestration-LangGraph-orange?style=for-the-badge)](https://github.com/langchain-ai/langgraph)
+[![LangChain](https://img.shields.io/badge/Framework-LangChain-1C3C3C?style=for-the-badge&logo=chainlink&logoColor=white)](https://python.langchain.com/)
+[![FAISS](https://img.shields.io/badge/Vector%20Store-FAISS-0468FF?style=for-the-badge)](https://github.com/facebookresearch/faiss)
+[![HuggingFace](https://img.shields.io/badge/Embeddings-HuggingFace%20MiniLM-yellow?style=for-the-badge&logo=huggingface&logoColor=white)](https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2)
+[![LLM](https://img.shields.io/badge/Inference-NVIDIA%20NIM%20%2F%20Llama%203.2-76b900?style=for-the-badge&logo=nvidia&logoColor=white)](https://build.nvidia.com/)
 
----
-
-## 🏗️ Architecture & Flow (Start to End)
-
-### 1. The Frontend (User Interface)
-- **Visual Design & Typography:** Engineered with a warm, premium gradient design system (pink, yellow, and sky blue hues), the application leverages modern glassmorphism and the `Inter` font family to ensure an inviting yet highly professional aesthetic.
-- **Dynamic Multi-Page SPA:** An interactive Single-Page Application (SPA) natively handles navigation across 4 distinct views with zero page reloads:
-  1. **Landing Hero:** A full-viewport introduction with animated visual elements and feature highlights.
-  2. **Document Upload:** A drag-and-drop interface for ingesting `.txt` medical notes and prescriptions.
-  3. **RAG Chat Interface:** The core Q&A dashboard containing the chat window, real-time performance metrics, and dynamic typing indicators.
-  4. **About Team:** A dedicated, full-screen profile page showcasing the primary architects.
-- **Creator Profiles:**
-  - **Vaibhav Sharma** (Final-year B.Tech CSE AI/ML Engineer passionate about RAG systems and LLMs)
-  - **Bhaskar Mishra** (3rd Year B.Tech Backend Developer and ML enthusiast)
-- **Data Entry & Flow:** Users start by uploading a clinical document. The file is sent via AJAX to the backend for indexing. Once successful, the UI transitions to the Chat Interface where the doctor can sequentially ask questions about the patient's data.
-
-### 2. The Backend (Flask Application)
-- **What it is:** A Python Flask server (`app.py`) acting as the API layer.
-- **How it works:** 
-  - The `@app.route("/")` endpoint serves the SPA application.
-  - The `@app.route("/api/upload")` endpoint receives the document text and triggers the RAG ingestion process.
-  - The `@app.route("/api/qa")` endpoint receives the user's chat queries, retrieves the answer, and calculates performance metrics.
-
-### 3. The Retrieval-Augmented Generation (RAG) Engine
-Once a document is uploaded, the magic of RAG ensures the AI only references the provided medical text:
-
-- **The Problem:** General LLMs often hallucinate incorrect medical advice or invent patient data.
-- **The RAG Solution:** We force the LLM to act purely as a reading-comprehension engine over the specific document the doctor provided.
-
-**Step-by-Step RAG Flow (`rag_engine.py`):**
-1. **Dynamic Ingestion:** The uploaded document is split into smaller, logical text "chunks" to prevent overwhelming the AI's context window.
-2. **TF-IDF Vectorization:** The system passes these chunks through `scikit-learn`'s `TfidfVectorizer` to convert them into mathematical vectors (sparse arrays), storing them in memory for the session.
-3. **Retrieval (Cosine Similarity):** When the doctor asks a question, that question is vectorized. The engine calculates the Cosine Similarity between the question vector and all document chunk vectors.
-4. **Intelligent Context Pruning:** We retrieve only the Top 3 most relevant chunks to the question, ensuring maximum accuracy and minimizing API latency.
-
-### 4. The Large Language Model (LLM) Inference (`triage_service.py`)
-- We use the `OpenAI` client connected to **OpenRouter**, utilizing a completely free, fast model (`arcee-ai/trinity-large-preview:free`).
-- **The Prompt:** The `DocumentQAService` takes the retrieved RAG chunks and the doctor's question, wrapping them in a strict system prompt. The prompt commands the AI to answer *only* based on the provided excerpts and clearly state if the information is missing.
-- **The API Call:** This highly constrained payload is sent securely to OpenRouter.
-
-### 5. Final Delivery & Metrics
-- The LLM streams back the answer.
-- The Flask app calculates critical real-time performance metrics:
-  - **Latency (ms):** Total round-trip time of the API call.
-  - **Token Speed:** Words generated per second.
-  - **Algorithmic Confidence:** The average relevance score of the retrieved chunks.
-- The response and metrics are sent back to the frontend, displaying the answer in the chat bubble while rendering the speed/confidence stats dynamically in the side panel.
+An advanced, evidence-grounded Medical Retrieval-Augmented Generation (RAG) assistant designed for healthcare workflows. MedRAG 2.0 allows users to upload clinical documents (such as lab reports, prescriptions, and discharge summaries) and query an AI that is **strictly constrained to the provided source text**, eliminating hallucinations with an automated verification loop.
 
 ---
 
-## 🚀 Deployment Considerations (Vercel)
-To allow the project to be fully deployable for free on Vercel Serverless Functions, we bypassed heavy embedding models (like PyTorch/SentenceTransformers, which exceed Vercel's 250MB limit). By utilizing Scikit-Learn's TF-IDF vectorization, the RAG engine achieves blazing-fast, lightweight similarity matching natively in Python, keeping the build size extraordinarily small while maintaining high retrieval accuracy for text-based clinical notes.
+## 🌟 Key Capabilities
+
+- 📄 **Multi-Format Ingestion & Classification:** Ingests both `.pdf` (multi-page extraction via `pypdf`) and `.txt` files, automatically categorizing them into *Prescription*, *Lab Report*, *Discharge Summary*, or *Medical Test Report*.
+- ⚡ **Semantic Vector Search with FAISS & HuggingFace Embeddings:** Documents are split using LangChain's `RecursiveCharacterTextSplitter` (`chunk_size=450`, `chunk_overlap=60`) to preserve clinical context. Dense 384-dimensional semantic embeddings are generated via HuggingFace's `sentence-transformers/all-MiniLM-L6-v2` and indexed into an in-memory **FAISS** vector store, enabling accurate conceptual matching across medical synonyms.
+- 🧠 **LangGraph Agentic State Workflow:** Manages clinical inquiry through an explicit state graph:
+  - **Query Understanding & Routing:** Intelligently routes inputs into document Q&A (`rag`), user clarification requests (`clarify`), or unsupported diagnostic questions (`unsupported`).
+  - **Evidence Grounding:** Enforces strict excerpt-based answers with granular source and page citations (`[Source: file.pdf, Page 1]`).
+  - **Evidence-Grounded Prompting:** Each LLM call is formatted through a **LangChain `PromptTemplate`** for consistent, structured clinical Q&A.
+  - **Self-Verification Loop:** Validates generated responses against retrieved document evidence; safely retries or falls back to medical disclaimers if ungrounded claims are detected.
+  - **Clinical Safety Refusals:** Refuses to issue unqualified medical diagnoses, directing patients to licensed practitioners.
+- 📊 **Real-Time Telemetry & Metrics:** Tracks end-to-end latency (ms), token generation speed, and algorithmic retrieval confidence for every response.
+- 🎨 **Modern SPA Interface:** Built with responsive vanilla HTML5/CSS3 (warm gradient glassmorphism palette) and vanilla JavaScript with dynamic typing indicators and Markdown rendering.
+
+---
+
+## 🏗️ System Architecture & Workflow
+
+```
+                        User Clinical Query
+                               │
+                               ▼
+                   ┌───────────────────────┐
+                   │ understand_and_route  │
+                   └───────────┬───────────┘
+                               │
+            ┌──────────────────┼──────────────────┐
+            ▼                  ▼                  ▼
+      (clarification)    (unsupported)          (rag)
+            │                  │                  │
+            │                  ▼                  ▼
+            │           ┌──────────────┐   ┌──────────────┐
+            │           │ safe_refusal │   │   retrieve   │
+            │           └──────┬───────┘   └──────┬───────┘
+            │                  │                  ▼
+            │                  │           ┌──────────────┐
+            │                  │           │generate_ans  │
+            │                  │           └──────┬───────┘
+            │                  │                  ▼
+            │                  │           ┌──────────────┐
+            │                  │           │verify_evid.  │
+            │                  │           └──────┬───────┘
+            │                  │              /        \
+            │                  │          (valid)    (invalid)
+            │                  │            │            │
+            │                  │            │       [retry once]
+            │                  │            │            │
+            │                  │            │      (still invalid)
+            │                  │            │            ▼
+            │                  └────────────┼────> [safe_refusal]
+            ▼                               ▼            ▼
+   User Clarification                  Final Answer  Safe Medical Notice
+   (e.g., Vague Query)                 + Citations   + Doctor Disclaimer
+```
+
+---
+
+## 📁 Repository Structure
+
+```text
+RAG/
+├── backend/                       # Python Flask, RAG, and LangGraph modules
+│   ├── app.py                     # Minimal Flask REST API
+│   ├── config.py                  # API keys & configuration loader
+│   ├── ingestion.py               # LangChain loaders (PyPDFLoader, TextLoader) & splitters
+│   ├── rag_engine.py              # FAISS vector store & HuggingFace semantic embeddings
+│   ├── triage_graph.py            # LangGraph decision workflow & LCEL chat chain
+│   ├── triage_service.py          # Central service coordinator connecting RAG + LangGraph
+│   └── requirements.txt           # Python backend dependencies
+├── frontend/                      # Web user interface
+│   └── index.html                 # Single-Page Application interface
+├── documents/                     # Sample clinical documents for testing
+│   ├── document.txt
+│   ├── prescription.txt
+│   └── sample_lab_report.pdf
+├── requirements.txt               # Root Python dependency manifest
+├── understanding_code.md          # In-depth architectural and code-reading guide
+└── README.md                      # Primary project documentation
+```
+
+---
+
+## 🛠️ Technology Stack
+
+| Layer | Technology | Purpose |
+| :--- | :--- | :--- |
+| **Frontend** | HTML5, CSS3, JavaScript | Modern glassmorphism SPA, markdown rendering, responsive layouts |
+| **Backend API** | Flask | REST endpoints (`/api/upload`, `/api/qa`) |
+| **Orchestration** | LangGraph | State machine managing query routing, RAG retrieval, and verification |
+| **Document Splitting & Prompts** | LangChain (`langchain-text-splitters`, `langchain-core`) | Overlap-aware chunking (`RecursiveCharacterTextSplitter`) & standardized prompt templates |
+| **Vector Retrieval** | FAISS + HuggingFace Embeddings (`all-MiniLM-L6-v2`) | High-speed dense semantic vector similarity search |
+| **PDF Extraction** | PyPDF | Multi-page text and metadata extraction from clinical PDFs |
+| **LLM Inference** | NVIDIA NIM API (`meta/llama-3.2-11b-vision-instruct`) | High-speed, evidence-grounded clinical reasoning |
+
+---
+
+## 🚀 Getting Started Locally
+
+### 1. Clone the Repository
+```bash
+git clone https://github.com/7vaibhav31/Emergency_Triage_Project.git
+cd Emergency_Triage_Project
+```
+
+### 2. Set Up a Virtual Environment
+```bash
+# Windows
+python -m venv .venv
+.\.venv\Scripts\activate
+
+# macOS / Linux
+python3 -m venv .venv
+source .venv/bin/activate
+```
+
+### 3. Install Dependencies
+```bash
+pip install -r backend/requirements.txt
+```
+
+### 4. Configure Environment Variables
+Create a `.env` file in `backend/` (or root):
+
+```env
+NVIDIA_API_KEY="your_nvidia_api_key_here"
+NVIDIA_BASE_URL="https://integrate.api.nvidia.com/v1"
+MODEL_NAME="meta/llama-3.2-11b-vision-instruct"
+```
+
+### 5. Launch the Server
+```bash
+cd backend
+python app.py
+```
+
+Open your browser and visit: **[http://localhost:5000](http://localhost:5000)**
+
+---
+
+## 🧪 Testing the Application
+
+1. **Upload a Sample Document:**
+   - Drag & drop or select `documents/sample_lab_report.pdf` or `documents/prescription.txt`.
+   - The system automatically classifies the document (e.g., *Prescription* or *Lab Report*) and chunks it with page references.
+2. **Ask Questions:**
+   - *"What is the prescribed dosage for Amoxicillin?"*
+   - *"What was the patient's Hemoglobin level?"*
+3. **Test Safety & Refusals:**
+   - Ask an ungrounded or diagnostic question: *"Diagnose my chest pain and tell me what surgery I need."*
+   - Observe the LangGraph routing trigger a safe medical disclaimer advising the user to consult a licensed physician.
+
+---
+
+## 👥 Contributors
+
+- **[Vaibhav Sharma](https://github.com/7vaibhav31)** — B.Tech CSE (AI/ML) | RAG Architectures & LLM Engineering
+- **[Bhaskar Mishra](https://github.com/Bhaskar7462)** — B.Tech CSE | Backend Development & Machine Learning

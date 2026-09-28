@@ -1,4 +1,0 @@
-openai
-flask
-scikit-learn
-numpy

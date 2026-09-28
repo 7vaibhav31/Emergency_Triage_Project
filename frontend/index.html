@@ -1,45 +1,4 @@
-import os
-from flask import Flask, request, jsonify, render_template_string
-from triage_service import DocumentQAService
-
-app = Flask(__name__)
-
-print("[App] Initializing Document QA Engine...")
-qa_service = DocumentQAService()
-print("[App] Service Ready. Visit http://localhost:5000")
-
-@app.route("/")
-def index():
-    return render_template_string(HTML_PAGE)
-
-@app.route("/api/upload", methods=["POST"])
-def upload_doc():
-    data = request.get_json()
-    text = data.get("text", "").strip()
-    if not text:
-        return jsonify({"error": "No document text provided."}), 400
-    try:
-        chunks = qa_service.ingest_document(text)
-        return jsonify({"message": f"Successfully indexed into {chunks} context fragments.", "chunks": chunks})
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-@app.route("/api/qa", methods=["POST"])
-def qa_document():
-    data = request.get_json()
-    query = data.get("query", "").strip()
-    if not query:
-        return jsonify({"error": "Query required."}), 400
-    try:
-        if not qa_service.rag.chunks:
-            return jsonify({"error": "Please upload a prescription or document first."}), 400
-        result = qa_service.answer_medical_question(query)
-        return jsonify(result)
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-
-HTML_PAGE = """<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8"/>
@@ -291,7 +250,39 @@ HTML_PAGE = """<!DOCTYPE html>
   }
   .project-strip h3 { font-size:1.25rem; font-weight:800; color:var(--text-dark); margin-bottom:16px; }
   .tech-pills { display:flex; gap:12px; justify-content:center; flex-wrap:wrap; }
-  .tech-pill { background:linear-gradient(135deg,var(--pink-soft),var(--yellow-light)); border:1.5px solid var(--pink-light); color:var(--text-dark); padding:8px 18px; border-radius:50px; font-size:0.82rem; font-weight:700; }
+  .safety-disclaimer {
+    padding: 9px 18px;
+    background: #fff9e6;
+    border-top: 1px solid #ffe8a3;
+    color: #8c5800;
+    font-size: 0.78rem;
+    font-weight: 500;
+    text-align: center;
+    flex-shrink: 0;
+  }
+  .citation-box {
+    margin-top: 12px;
+    padding: 10px 14px;
+    background: rgba(255, 255, 255, 0.75);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    font-size: 0.8rem;
+    color: var(--text-mid);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.03);
+  }
+  .citation-box strong { color: var(--text-dark); display: block; margin-bottom: 5px; }
+  .citation-box ul { margin-left: 18px; margin-top: 2px; }
+  .citation-box li { margin-bottom: 3px; }
+  .doc-badge {
+    margin-top: 6px;
+    display: inline-block;
+    padding: 3px 10px;
+    background: rgba(255,107,157,0.15);
+    color: var(--pink);
+    border-radius: 12px;
+    font-size: 0.75rem;
+    font-weight: 700;
+  }
 </style>
 </head>
 <body>
@@ -338,14 +329,14 @@ HTML_PAGE = """<!DOCTYPE html>
 
   <div class="upload-card">
     <div class="upload-icon-wrap">📄</div>
-    <h1>Upload Your Document</h1>
-    <p>Upload a prescription or medical document (.txt). It will be indexed into the RAG pipeline and become the AI knowledge base.</p>
+    <h1>Upload Medical Document</h1>
+    <p>Upload a prescription, lab report, discharge summary, or medical notes (.txt or .pdf). It will be indexed into the MedRAG 2.0 pipeline.</p>
 
     <div class="drop-zone" onclick="document.getElementById('fileInput').click()">
-      <input type="file" id="fileInput" accept=".txt" style="display:none" onchange="handleUpload(event)">
+      <input type="file" id="fileInput" accept=".txt,.pdf" style="display:none" onchange="handleUpload(event)">
       <div class="dz-icon">📋</div>
       <h3>Drop document here or click to browse</h3>
-      <small>Supports .txt · Prescription, clinical notes, patient records</small>
+      <small>Supports .txt and .pdf · Lab reports, prescriptions, discharge summaries</small>
     </div>
 
     <div id="uploadStatus"></div>
@@ -390,6 +381,7 @@ HTML_PAGE = """<!DOCTYPE html>
       <div class="doc-label">📁 Active Document</div>
       <div class="doc-name" id="docNameDisplay">—</div>
       <div class="doc-chunks" id="docChunksDisplay"></div>
+      <div class="doc-badge" id="docCategoryDisplay"></div>
     </div>
   </aside>
 
@@ -416,6 +408,9 @@ HTML_PAGE = """<!DOCTYPE html>
             <div class="chip" onclick="useChip(this)">What is the patient's diagnosis?</div>
           </div>
         </div>
+      </div>
+      <div class="safety-disclaimer">
+        ⚕️ <strong>Medical Safety Notice:</strong> MedRAG explains information from uploaded documents and is not a substitute for professional medical advice.
       </div>
       <div class="chat-input-area">
         <div class="chat-input-wrap">
@@ -547,7 +542,7 @@ function switchPanel(btn, title) {
 // ----------------------------------------------------------------
 // UPLOAD
 // ----------------------------------------------------------------
-let loadedDocName = '', loadedChunks = 0;
+let loadedDocName = '', loadedChunks = 0, loadedCategory = '';
 
 async function handleUpload(e) {
   const file = e.target.files[0];
@@ -555,30 +550,31 @@ async function handleUpload(e) {
   const statusEl = document.getElementById('uploadStatus');
   statusEl.style.display = 'block';
   statusEl.className = 'loading';
-  statusEl.innerHTML = `<div style="display:flex;align-items:center;gap:10px;justify-content:center;"><div class="spinner" style="border-color:rgba(255,107,157,0.3);border-top-color:var(--pink);"></div>&nbsp;Indexing <strong>${file.name}</strong> into RAG pipeline…</div>`;
+  statusEl.innerHTML = `<div style="display:flex;align-items:center;gap:10px;justify-content:center;"><div class="spinner" style="border-color:rgba(255,107,157,0.3);border-top-color:var(--pink);"></div>&nbsp;Ingesting <strong>${file.name}</strong> into MedRAG 2.0…</div>`;
 
-  const reader = new FileReader();
-  reader.onload = async (ev) => {
-    try {
-      const res  = await fetch('/api/upload', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ text: ev.target.result }) });
-      const data = await res.json();
-      if (data.error) throw new Error(data.error);
-      loadedDocName = file.name;
-      loadedChunks  = data.chunks;
-      statusEl.className = 'success';
-      statusEl.innerHTML = `✅ <strong>${file.name}</strong> indexed into <strong>${data.chunks} context fragments</strong>. Routing to AI assistant…`;
-      setTimeout(() => {
-        goToPage('page-chat');
-        document.getElementById('docInfoBox').style.display = 'block';
-        document.getElementById('docNameDisplay').textContent  = loadedDocName;
-        document.getElementById('docChunksDisplay').textContent = `${loadedChunks} context chunks`;
-      }, 1600);
-    } catch (err) {
-      statusEl.className = 'error';
-      statusEl.innerHTML = `❌ Upload failed: ${err.message}`;
-    }
-  };
-  reader.readAsText(file);
+  const formData = new FormData();
+  formData.append('file', file);
+
+  try {
+    const res = await fetch('/api/upload', { method: 'POST', body: formData });
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+    loadedDocName = data.filename || file.name;
+    loadedChunks = data.chunks;
+    loadedCategory = data.category || 'General Medical Document';
+    statusEl.className = 'success';
+    statusEl.innerHTML = `✅ <strong>${loadedDocName}</strong> (${loadedCategory}) indexed into <strong>${data.chunks} context fragments</strong>. Routing to AI assistant…`;
+    setTimeout(() => {
+      goToPage('page-chat');
+      document.getElementById('docInfoBox').style.display = 'block';
+      document.getElementById('docNameDisplay').textContent = loadedDocName;
+      document.getElementById('docChunksDisplay').textContent = `${loadedChunks} context chunks`;
+      document.getElementById('docCategoryDisplay').textContent = `🏷️ ${loadedCategory}`;
+    }, 1400);
+  } catch (err) {
+    statusEl.className = 'error';
+    statusEl.innerHTML = `❌ Upload failed: ${err.message}`;
+  }
 }
 
 // ----------------------------------------------------------------
@@ -603,6 +599,12 @@ function appendMsg(role, text, meta) {
   bubble.className = 'msg-bubble';
   if (role === 'bot') {
     bubble.innerHTML = marked.parse(text);
+    if (meta && meta.citations && meta.citations.length > 0) {
+      const citeBox = document.createElement('div');
+      citeBox.className = 'citation-box';
+      citeBox.innerHTML = `<strong>📑 Evidence Sources:</strong><ul>${meta.citations.map(c => `<li>${c}</li>`).join('')}</ul>`;
+      bubble.appendChild(citeBox);
+    }
   } else {
     bubble.textContent = text;
   }
@@ -642,8 +644,16 @@ async function sendMessage() {
     const res  = await fetch('/api/qa', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ query }) });
     const data = await res.json();
     removeTyping();
-    if (data.error) { appendMsg('bot', '⚠️ ' + data.error); }
-    else { appendMsg('bot', data.answer, { latency_ms: data.latency_ms, chunks_used: data.chunks_used }); updateMetrics(query, data); }
+    if (data.error) {
+      appendMsg('bot', '⚠️ ' + data.error);
+    } else {
+      appendMsg('bot', data.answer, {
+        latency_ms: data.latency_ms,
+        chunks_used: data.chunks_used,
+        citations: data.citations
+      });
+      updateMetrics(query, data);
+    }
   } catch (err) {
     removeTyping(); appendMsg('bot', '⚠️ Network error: ' + err.message);
   }
@@ -681,7 +691,4 @@ function updateMetrics(query, data) {
 }
 </script>
 </body>
-</html>"""
-
-if __name__ == "__main__":
-    app.run(debug=True, port=5000, use_reloader=False)
+</html>
