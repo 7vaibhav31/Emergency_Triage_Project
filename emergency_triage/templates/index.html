@@ -587,7 +587,7 @@
         <a href="https://aistudio.google.com/app/apikey" target="_blank" class="free-badge">Free Key ↗</a>
       </div>
       <input type="password" id="geminiApiKeyInput" class="api-key-input" placeholder="Paste Gemini key (free)" oninput="saveApiKey(this.value)">
-      <div class="api-key-hint" id="apiKeyStatusHint">Saved in browser</div>
+      <div class="api-key-hint" id="apiKeyStatusHint">Optional if set in Vercel env vars</div>
     </div>
 
     <div class="sidebar-section-title" style="margin-top:auto;">System</div>
@@ -1033,15 +1033,8 @@ async function sendMessage() {
     return;
   }
 
-  // Guard: no API key
+  // Pass key if available in sidebar/localStorage; backend falls back to GEMINI_API_KEY env var
   const apiKey = getApiKey();
-  if (!apiKey) {
-    showToast('info',
-      'Gemini API Key Required',
-      'Paste your free Google Gemini key in the left sidebar to get AI-powered answers. <a href="https://aistudio.google.com/app/apikey" target="_blank" style="color:var(--pink);font-weight:700;">Get free key ↗</a>');
-    document.getElementById('geminiApiKeyInput')?.focus();
-    return;
-  }
 
   const sendBtn = document.getElementById('sendBtn');
   sendBtn.disabled = true;
