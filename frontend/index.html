@@ -439,9 +439,71 @@
     font-size: 0.75rem;
     font-weight: 700;
   }
+
+  /* ======================== TOAST ALERTS ======================== */
+  #toastContainer {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    z-index: 9999;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    pointer-events: none;
+  }
+  .toast {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 14px 18px;
+    border-radius: 16px;
+    font-size: 0.88rem;
+    font-weight: 600;
+    font-family: 'Inter', sans-serif;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.14);
+    pointer-events: all;
+    max-width: 340px;
+    animation: toastIn 0.4s cubic-bezier(0.16,1,0.3,1) forwards;
+    line-height: 1.5;
+  }
+  .toast.warn {
+    background: linear-gradient(135deg, #fff9e6, #fff3cc);
+    border: 1.5px solid #ffe58a;
+    color: #7a4f00;
+  }
+  .toast.error {
+    background: linear-gradient(135deg, #fff5f5, #ffe4e4);
+    border: 1.5px solid #ffb3b3;
+    color: #9b1c1c;
+  }
+  .toast.info {
+    background: linear-gradient(135deg, var(--pink-soft), #fff5e0);
+    border: 1.5px solid var(--pink-light);
+    color: #8c1a4b;
+  }
+  .toast-icon { font-size: 1.3rem; flex-shrink: 0; margin-top: 1px; }
+  .toast-body .toast-title { font-weight: 800; margin-bottom: 2px; font-size: 0.9rem; }
+  .toast-body .toast-msg   { font-weight: 500; font-size: 0.82rem; opacity: 0.85; }
+  .toast-close {
+    margin-left: auto;
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 1.1rem;
+    color: inherit;
+    opacity: 0.5;
+    padding: 0 0 0 8px;
+    flex-shrink: 0;
+    pointer-events: all;
+  }
+  .toast-close:hover { opacity: 1; }
+  .toast.hiding { animation: toastOut 0.3s ease forwards; }
+  @keyframes toastIn  { from { opacity:0; transform:translateX(60px) scale(0.95); } to { opacity:1; transform:translateX(0) scale(1); } }
+  @keyframes toastOut { from { opacity:1; transform:translateX(0); max-height:100px; } to { opacity:0; transform:translateX(60px); max-height:0; padding:0; margin:0; } }
 </style>
 </head>
 <body>
+<div id="toastContainer"></div>
 
 <!-- ======================================================= -->
 <!-- PAGE 1: LANDING                                          -->
@@ -904,17 +966,97 @@ function showTyping() {
 }
 function removeTyping() { const t = document.getElementById('typingIndicator'); if(t) t.remove(); }
 
+// ----------------------------------------------------------------
+// TOAST NOTIFICATION SYSTEM
+// ----------------------------------------------------------------
+function showToast(type, title, msg, durationMs = 5000) {
+  const container = document.getElementById('toastContainer');
+  const toast = document.createElement('div');
+  toast.className = `toast ${type}`;
+  const icons = { warn: '⚠️', error: '🚫', info: '💡' };
+  toast.innerHTML = `
+    <span class="toast-icon">${icons[type] || '📢'}</span>
+    <div class="toast-body">
+      <div class="toast-title">${title}</div>
+      <div class="toast-msg">${msg}</div>
+    </div>
+    <button class="toast-close" onclick="dismissToast(this.parentElement)">✕</button>
+  `;
+  container.appendChild(toast);
+  setTimeout(() => dismissToast(toast), durationMs);
+}
+function dismissToast(toast) {
+  if (!toast || toast.classList.contains('hiding')) return;
+  toast.classList.add('hiding');
+  setTimeout(() => toast.remove(), 300);
+}
+
+// ----------------------------------------------------------------
+// API KEY PERSISTENCE
+// ----------------------------------------------------------------
+function saveApiKey(val) {
+  localStorage.setItem('gemini_api_key', val);
+  document.getElementById('apiKeyStatusHint').textContent = val ? '✅ Key saved in browser' : 'Saved in browser';
+}
+function getApiKey() {
+  return document.getElementById('geminiApiKeyInput')?.value?.trim()
+    || localStorage.getItem('gemini_api_key')
+    || '';
+}
+window.addEventListener('DOMContentLoaded', () => {
+  const saved = localStorage.getItem('gemini_api_key');
+  if (saved) {
+    const inp = document.getElementById('geminiApiKeyInput');
+    if (inp) { inp.value = saved; }
+    document.getElementById('apiKeyStatusHint').textContent = '✅ Key saved in browser';
+  }
+});
+
 async function sendMessage() {
   const input = document.getElementById('chatInput');
   const query = input.value.trim();
   if (!query) return;
+
+  // Guard: no documents uploaded
+  if (indexedDocuments.length === 0) {
+    showToast('warn',
+      'No Medical Document Uploaded',
+      'Please upload a medical file (.pdf or .txt) in the left sidebar before asking questions.');
+    // Highlight the upload zone
+    const dz = document.getElementById('sidebarDropZone');
+    if (dz) {
+      dz.style.borderColor = 'var(--pink)';
+      dz.style.background = 'rgba(255,107,157,0.10)';
+      setTimeout(() => { dz.style.borderColor = ''; dz.style.background = ''; }, 2500);
+    }
+    input.focus();
+    return;
+  }
+
+  // Guard: no API key
+  const apiKey = getApiKey();
+  if (!apiKey) {
+    showToast('info',
+      'Gemini API Key Required',
+      'Paste your free Google Gemini key in the left sidebar to get AI-powered answers. <a href="https://aistudio.google.com/app/apikey" target="_blank" style="color:var(--pink);font-weight:700;">Get free key ↗</a>');
+    document.getElementById('geminiApiKeyInput')?.focus();
+    return;
+  }
+
   const sendBtn = document.getElementById('sendBtn');
   sendBtn.disabled = true;
   input.value = ''; input.style.height = 'auto';
   appendMsg('user', query);
   showTyping();
   try {
-    const res  = await fetch('/api/qa', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ query }) });
+    const res  = await fetch('/api/qa', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query, api_key: apiKey })
+    });
+    if (!res.ok && res.headers.get('content-type')?.includes('text/html')) {
+      throw new Error(`Server error (${res.status}). Vercel may still be deploying — try again in 30s.`);
+    }
     const data = await res.json();
     removeTyping();
     if (data.error) {
@@ -928,7 +1070,9 @@ async function sendMessage() {
       updateMetrics(query, data);
     }
   } catch (err) {
-    removeTyping(); appendMsg('bot', '⚠️ Network error: ' + err.message);
+    removeTyping();
+    showToast('error', 'Connection Error', err.message, 7000);
+    appendMsg('bot', '⚠️ ' + err.message);
   }
   sendBtn.disabled = false; input.focus();
 }

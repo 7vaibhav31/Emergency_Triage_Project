@@ -1,6 +1,6 @@
-flask
-openai
-scikit-learn
-numpy
-pypdf
-python-dotenv
+flask>=3.0.0
+openai>=1.30.0
+scikit-learn>=1.4.0
+numpy>=1.26.0
+pypdf>=4.0.0
+python-dotenv>=1.0.0
