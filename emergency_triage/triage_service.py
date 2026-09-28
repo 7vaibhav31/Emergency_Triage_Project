@@ -25,8 +25,9 @@ IMPORTANT RULES:
 
 def resolve_ai_client(api_key: str = None):
     """
-    Returns (client, model_name, provider_name).
-    Supports Google Gemini Free Tier keys (both AIza... and AQ... formats).
+    Returns (client, model_name, provider_name, fallback_models).
+    Supports Google Gemini Free Tier keys (both AIza... and AQ... formats)
+    with automatic failover to resilient lightweight models if a capacity spike occurs.
     """
     # 1. Check for Gemini Key (passed from UI or Vercel environment variable)
     key = api_key or os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
@@ -39,13 +40,22 @@ def resolve_ai_client(api_key: str = None):
     )
 
     if is_gemini_key:
+        primary_model = os.getenv("GEMINI_MODEL", "gemini-3.5-flash-lite")
+        gemini_fallbacks = [
+            "gemini-3.5-flash-lite",
+            "gemini-flash-lite-latest",
+            "gemini-3.1-flash-lite",
+            "gemini-3.8-flash",
+            "gemini-3.5-flash"
+        ]
         return (
             OpenAI(
                 api_key=key,
                 base_url="https://generativelanguage.googleapis.com/v1beta/openai/"
             ),
-            os.getenv("GEMINI_MODEL", "gemini-3.8-flash"),
-            "Google Gemini 3.8 Flash (Free Tier)"
+            primary_model,
+            "Google Gemini (Free Tier)",
+            gemini_fallbacks
         )
 
     # 2. Check for NVIDIA NIM key
@@ -57,7 +67,8 @@ def resolve_ai_client(api_key: str = None):
                 base_url=os.getenv("NVIDIA_BASE_URL", "https://integrate.api.nvidia.com/v1")
             ),
             os.getenv("MODEL_NAME", "meta/llama-3.2-11b-vision-instruct"),
-            "NVIDIA NIM"
+            "NVIDIA NIM",
+            []
         )
 
     # 3. Default: try Gemini endpoint with whatever key we have
@@ -66,8 +77,9 @@ def resolve_ai_client(api_key: str = None):
             api_key=key or "",
             base_url="https://generativelanguage.googleapis.com/v1beta/openai/"
         ),
-        "gemini-3.8-flash",
-        "Google Gemini 3.8 Flash"
+        "gemini-3.5-flash-lite",
+        "Google Gemini",
+        ["gemini-3.5-flash-lite", "gemini-flash-lite-latest", "gemini-3.8-flash"]
     )
 
 
@@ -116,7 +128,11 @@ class DocumentQAService:
                 "citations": []
             }
 
-        client, model_name, provider_name = resolve_ai_client(api_key)
+        client_tuple = resolve_ai_client(api_key)
+        client = client_tuple[0]
+        model_name = client_tuple[1]
+        provider_name = client_tuple[2]
+        fallback_models = client_tuple[3] if len(client_tuple) > 3 else []
 
         # Guardrail: No API key configured at all
         if not (api_key or os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY") or os.getenv("NVIDIA_API_KEY")):
@@ -153,25 +169,51 @@ class DocumentQAService:
 Based strictly on the medical excerpts above, answer the following clinical query:
 {query}"""
 
-        try:
-            response = client.chat.completions.create(
-                model=model_name,
-                max_tokens=500,
-                temperature=0.2,
-                messages=[
-                    {"role": "user", "content": full_prompt},
-                ],
-            )
-            answer = response.choices[0].message.content
-        except Exception as e:
-            err_str = str(e)
-            if "API key" in err_str or "400" in err_str or "401" in err_str or "403" in err_str or "INVALID_ARGUMENT" in err_str:
+        models_to_try = [model_name] + [m for m in fallback_models if m != model_name]
+        answer = None
+        last_error = None
+
+        for candidate_model in models_to_try:
+            try:
+                response = client.chat.completions.create(
+                    model=candidate_model,
+                    max_tokens=600,
+                    temperature=0.2,
+                    messages=[
+                        {"role": "user", "content": full_prompt},
+                    ],
+                )
+                if response.choices and len(response.choices) > 0:
+                    msg_content = response.choices[0].message.content
+                    if msg_content and len(msg_content.strip()) > 0:
+                        answer = msg_content
+                        provider_name = f"Google Gemini ({candidate_model})"
+                        break
+            except Exception as e:
+                last_error = e
+                err_str = str(e)
+                # If capacity spike (503), rate limit (429), or deprecated model (404), seamlessly cascade to next model
+                if any(x in err_str for x in ["503", "429", "404", "UNAVAILABLE", "high demand", "RESOURCE_EXHAUSTED", "NoneType"]):
+                    continue
+                # For auth or permissions, stop trying
+                if any(x in err_str for x in ["API key", "400", "401", "403", "INVALID_ARGUMENT", "PERMISSION_DENIED"]):
+                    break
+
+        if not answer:
+            err_str = str(last_error) if last_error else "Unknown error"
+            if any(x in err_str for x in ["API key", "400", "401", "403", "INVALID_ARGUMENT", "PERMISSION_DENIED"]):
                 answer = (
                     "⚠️ **Google Gemini Free Tier Key Required:**\n\n"
                     "To enable live medical responses for your documents:\n"
-                    "1. Get your 100% free API key from **[Google AI Studio (aistudio.google.com)](https://aistudio.google.com/app/apikey)**.\n"
-                    "2. Enter it in the **Google Gemini Key** box in the left sidebar (or set `GEMINI_API_KEY` in Vercel Environment Variables).\n"
+                    "1. Get your 100% free API key from **[Google AI Studio](https://aistudio.google.com/app/apikey)**.\n"
+                    "2. Enter it in the **Gemini Key** box in the left sidebar (or set `GEMINI_API_KEY` in Vercel Environment Variables).\n"
                     "3. Submit your question to get instant, evidence-grounded answers!"
+                )
+            elif any(x in err_str for x in ["503", "UNAVAILABLE", "high demand"]):
+                answer = (
+                    "⏳ **Google Gemini is currently experiencing temporary high traffic.**\n\n"
+                    "Google's free tier servers temporarily queued this request due to heavy traffic on their infrastructure.\n\n"
+                    "👉 **Please click the Send button again** — these spikes usually clear within 10–20 seconds."
                 )
             else:
                 answer = f"⚠️ AI Service Notice: {err_str}"
