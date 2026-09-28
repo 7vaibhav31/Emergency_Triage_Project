@@ -13,10 +13,9 @@ This project is an advanced Medical Retrieval-Augmented Generation (RAG) system 
   1. **Landing Hero:** A full-viewport introduction with animated visual elements and feature highlights.
   2. **Document Upload:** A drag-and-drop interface for ingesting `.txt` medical notes and prescriptions.
   3. **RAG Chat Interface:** The core Q&A dashboard containing the chat window, real-time performance metrics, and dynamic typing indicators.
-  4. **About Team:** A dedicated, full-screen profile page showcasing the primary architects.
-- **Creator Profiles:**
+  4. **About Creator:** A dedicated, full-screen profile page showcasing the developer.
+- **Creator Profile:**
   - **Vaibhav Sharma** (Final-year B.Tech CSE AI/ML Engineer passionate about RAG systems and LLMs)
-  - **Bhaskar Mishra** (3rd Year B.Tech Backend Developer and ML enthusiast)
 - **Data Entry & Flow:** Users start by uploading a clinical document. The file is sent via AJAX to the backend for indexing. Once successful, the UI transitions to the Chat Interface where the doctor can sequentially ask questions about the patient's data.
 
 ### 2. The Backend (Flask Application)

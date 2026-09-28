@@ -164,7 +164,6 @@ Open your browser and visit: **[http://localhost:5000](http://localhost:5000)**
 
 ---
 
-## 👥 Contributors
+## 👤 Author
 
 - **[Vaibhav Sharma](https://github.com/7vaibhav31)** — B.Tech CSE (AI/ML) | RAG Architectures & LLM Engineering
-- **[Bhaskar Mishra](https://github.com/Bhaskar7462)** — B.Tech CSE | Backend Development & Machine Learning
